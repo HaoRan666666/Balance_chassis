@@ -13,7 +13,7 @@
 ######################################
 # target
 ######################################
-TARGET = Basic_Framework_MC02
+TARGET = Balance_chassis
 
 
 ######################################
@@ -338,4 +338,6 @@ clean:
 #######################################
 -include $(wildcard $(BUILD_DIR)/*.d)
 
+Flash:
+	JLinkExe -if SWD -CommanderScript STM32.JLinkScript
 # *** EOF ***

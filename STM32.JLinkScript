@@ -1,0 +1,5 @@
+speed 4000
+device STM32H723VGTx
+r
+loadfile ./build/Balance_chassis.hex
+q
