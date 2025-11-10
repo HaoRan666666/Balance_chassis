@@ -47,14 +47,15 @@ static referee_info_t* referee_data; // 用于获取裁判系统的数据
 static Referee_Interactive_info_t ui_data; // UI数据，将底盘中的数据传入此结构体的对应变量中，UI会自动检测是否变化，对应显示UI
 
 static SuperCapInstance *cap;                                       // 超级电容
-static DJIMotorInstance *motor_lf, *motor_rf, *motor_lb, *motor_rb; // left right forward back
+static DMMotorInstance *motor_lf, *motor_rf, *motor_lb, *motor_rb; //四个髋关节电机的实例
+static DJIMotorInstance *motor_left ,*motor_right;  //左右足端轮电机实例
 
 /* 用于自旋变速策略的时间变量 */
 // static float t;
 
 /* 私有函数计算的中介变量,设为静态避免参数传递的开销 */
 static float chassis_vx, chassis_vy;     // 将云台系的速度投影到底盘
-static float vt_lf, vt_rf, vt_lb, vt_rb; // 底盘速度解算后的临时输出,待进行限幅
+// static float vt_lf, vt_rf, vt_lb, vt_rb; // 底盘速度解算后的临时输出,待进行限幅
 
 void ChassisInit()
 {
@@ -87,6 +88,7 @@ void ChassisInit()
         },
         .motor_type = DM8009,
     };
+    //轮电机初始化
     Motor_Init_Config_s chassis_DJI_motor_config = {  
         .can_init_config.can_handle = &hcan2,
         .controller_param_init_config = {
@@ -116,6 +118,9 @@ void ChassisInit()
         .motor_type = M3508,
     };
     //  @todo: 当前还没有设置电机的正反转,仍然需要手动添加reference的正负号,需要电机module的支持,待修改.
+
+    //1号和3号是左侧髋关节电机
+    //2号和4号是右侧髋关节电机
     chassis_DM_motor_config.can_init_config.tx_id = 1;
     chassis_DM_motor_config.controller_setting_init_config.motor_reverse_flag = MOTOR_DIRECTION_REVERSE;
     motor_lf = DMMotorInit(&chassis_DM_motor_config);
@@ -124,42 +129,40 @@ void ChassisInit()
     chassis_DM_motor_config.controller_setting_init_config.motor_reverse_flag = MOTOR_DIRECTION_REVERSE;
     motor_rf = DMMotorInit(&chassis_DM_motor_config);
 
-    chassis_DM_motor_config.can_init_config.tx_id = 4;
+    chassis_DM_motor_config.can_init_config.tx_id = 3;
     chassis_DM_motor_config.controller_setting_init_config.motor_reverse_flag = MOTOR_DIRECTION_REVERSE;
     motor_lb = DMMotorInit(&chassis_DM_motor_config);
 
-    chassis_DM_motor_config.can_init_config.tx_id = 3;
+    chassis_DM_motor_config.can_init_config.tx_id = 4;
     chassis_DM_motor_config.controller_setting_init_config.motor_reverse_flag = MOTOR_DIRECTION_REVERSE;
     motor_rb = DMMotorInit(&chassis_DM_motor_config);
 
 
     chassis_DJI_motor_config.can_init_config.tx_id = 1;
     chassis_DJI_motor_config.controller_setting_init_config.motor_reverse_flag = MOTOR_DIRECTION_REVERSE;
-    motor_lb = DMMotorInit(&chassis_DJI_motor_config);
+    motor_left = DJIMotorInit(&chassis_DJI_motor_config);
 
     chassis_DJI_motor_config.can_init_config.tx_id = 2;
     chassis_DJI_motor_config.controller_setting_init_config.motor_reverse_flag = MOTOR_DIRECTION_REVERSE;
-    motor_rb = DMMotorInit(&chassis_DJI_motor_config);
-
-
+    motor_right = DJIMotorInit(&chassis_DJI_motor_config);
 
     referee_data = UITaskInit(&huart1,&ui_data); // 裁判系统初始化,会同时初始化UI
 
     SuperCap_Init_Config_s cap_conf = {
         .can_config = {
-            .can_handle = &hcan2,
+            .can_handle = &hcan3,
             .tx_id = 0x302, // 超级电容默认接收id
             .rx_id = 0x301, // 超级电容默认发送id,注意tx和rx在其他人看来是反的
         }};
     cap = SuperCapInit(&cap_conf); // 超级电容初始化
 
-    // 发布订阅初始化,如果为双板,则需要can comm来传递消息
+    // 发布订阅初始化,如果为双板,则需要cancomm来传递消息
 #ifdef CHASSIS_BOARD
     Chassis_IMU_data = INS_Init(); // 底盘IMU初始化
 
     CANComm_Init_Config_s comm_conf = {
         .can_config = {
-            .can_handle = &hcan2,
+            .can_handle = &hcan3,
             .tx_id = 0x311,
             .rx_id = 0x312,
         },
@@ -175,21 +178,6 @@ void ChassisInit()
 #endif // ONE_BOARD
 }
 
-#define LF_CENTER ((HALF_TRACK_WIDTH + CENTER_GIMBAL_OFFSET_X + HALF_WHEEL_BASE - CENTER_GIMBAL_OFFSET_Y) * DEGREE_2_RAD)
-#define RF_CENTER ((HALF_TRACK_WIDTH - CENTER_GIMBAL_OFFSET_X + HALF_WHEEL_BASE - CENTER_GIMBAL_OFFSET_Y) * DEGREE_2_RAD)
-#define LB_CENTER ((HALF_TRACK_WIDTH + CENTER_GIMBAL_OFFSET_X + HALF_WHEEL_BASE + CENTER_GIMBAL_OFFSET_Y) * DEGREE_2_RAD)
-#define RB_CENTER ((HALF_TRACK_WIDTH - CENTER_GIMBAL_OFFSET_X + HALF_WHEEL_BASE + CENTER_GIMBAL_OFFSET_Y) * DEGREE_2_RAD)
-/**
- * @brief 计算每个轮毂电机的输出,正运动学解算
- *        用宏进行预替换减小开销,运动解算具体过程参考教程
- */
-static void MecanumCalculate()
-{
-    vt_lf = -chassis_vx - chassis_vy - chassis_cmd_recv.wz * LF_CENTER;
-    vt_rf = -chassis_vx + chassis_vy - chassis_cmd_recv.wz * RF_CENTER;
-    vt_lb = chassis_vx - chassis_vy - chassis_cmd_recv.wz * LB_CENTER;
-    vt_rb = chassis_vx + chassis_vy - chassis_cmd_recv.wz * RB_CENTER;
-}
 
 /**
  * @brief 根据裁判系统和电容剩余容量对输出进行限制并设置电机参考值
@@ -202,10 +190,11 @@ static void LimitChassisOutput()
     // referee_data->PowerHeatData.chassis_power_buffer;
 
     // 完成功率限制后进行电机参考输入设定
-    DJIMotorSetRef(motor_lf, vt_lf);
-    DJIMotorSetRef(motor_rf, vt_rf);
-    DJIMotorSetRef(motor_lb, vt_lb);
-    DJIMotorSetRef(motor_rb, vt_rb);
+    //TODO: 改成力控
+    // DJIMotorSetRef(motor_lf, vt_lf);
+    // DJIMotorSetRef(motor_rf, vt_rf);
+    // DJIMotorSetRef(motor_lb, vt_lb);
+    // DJIMotorSetRef(motor_rb, vt_rb);
 }
 
 /**
@@ -234,17 +223,21 @@ void ChassisTask()
 
     if (chassis_cmd_recv.chassis_mode == CHASSIS_ZERO_FORCE)
     { // 如果出现重要模块离线或遥控器设置为急停,让电机停止
-        DJIMotorStop(motor_lf);
-        DJIMotorStop(motor_rf);
-        DJIMotorStop(motor_lb);
-        DJIMotorStop(motor_rb);
+        DMMotorStop(motor_lf);
+        DMMotorStop(motor_rf);
+        DMMotorStop(motor_lb);
+        DMMotorStop(motor_rb);
+        DJIMotorStop(motor_left);
+        DJIMotorStop(motor_right);
     }
     else
     { // 正常工作
-        DJIMotorEnable(motor_lf);
-        DJIMotorEnable(motor_rf);
-        DJIMotorEnable(motor_lb);
-        DJIMotorEnable(motor_rb);
+        DMMotorEnable(motor_lf);
+        DMMotorEnable(motor_rf);
+        DMMotorEnable(motor_lb);
+        DMMotorEnable(motor_rb);
+        DJIMotorEnable(motor_left);
+        DJIMotorEnable(motor_right);
     }
 
     // 根据控制模式设定旋转速度
@@ -271,8 +264,8 @@ void ChassisTask()
     chassis_vx = chassis_cmd_recv.vx * cos_theta - chassis_cmd_recv.vy * sin_theta;
     chassis_vy = chassis_cmd_recv.vx * sin_theta + chassis_cmd_recv.vy * cos_theta;
 
-    // 根据控制模式进行正运动学解算,计算底盘输出
-    MecanumCalculate();
+    //根据控制模式进行正运动学解算,计算底盘输出
+    //TODO：后续添加LQR计算
 
     // 根据裁判系统的反馈数据和电容数据对输出限幅并设定闭环参考值
     LimitChassisOutput();

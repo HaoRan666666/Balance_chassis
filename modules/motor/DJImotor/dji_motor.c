@@ -5,7 +5,7 @@
 
 static uint8_t idx = 0; // register idx,是该文件的全局电机索引,在注册时使用
 /* DJI电机的实例,此处仅保存指针,内存的分配将通过电机实例初始化时通过malloc()进行 */
-static DJIMotorInstance *dji_motor_instance[DJI_MOTOR_CNT] = {NULL}; // 会在control任务中遍历该指针数组进行pid计算
+DJIMotorInstance *dji_motor_instance[DJI_MOTOR_CNT] = {NULL}; // 会在control任务中遍历该指针数组进行pid计算
 
 
 #ifdef FDCAN
@@ -52,6 +52,11 @@ static CANInstance sender_assignment[6] = {
  */
 static uint8_t sender_enable_flag[9] = {0};
 
+
+DJIMotorInstance *Get_DJI_Instance()
+{
+    return &dji_motor_instance;
+}
 /**
  * @brief 根据电调/拨码开关上的ID,根据说明书的默认id分配方式计算发送ID和接收ID,
  *        并对电机进行分组以便处理多电机控制命令

@@ -21,7 +21,7 @@
 #include "master_process.h"
 #include "arm_math.h"
 
-static INS_t INS;
+INS_t INS;
 static IMU_Param_t IMU_Param;
 static PIDInstance TempCtrl = {0};
 
@@ -34,6 +34,10 @@ static uint32_t INS_DWT_Count = 0;
 static float dt = 0, t = 0;
 static float RefTemp = 40; // 恒温设定温度
 
+INS_t* Get_INS_Instance(void)
+{
+    return &INS;
+}
 static void IMU_Param_Correction(IMU_Param_t *param, float gyro[3], float accel[3]);
 
 static void IMUPWMSet(uint16_t pwm)

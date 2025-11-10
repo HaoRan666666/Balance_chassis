@@ -92,8 +92,10 @@ typedef struct
 
     uint32_t DWT_CNT;
     float dt;
-
+    
     PID_ErrorHandler_t ERRORHandler;
+
+    float Need_Value; 
 } PIDInstance;
 
 /* 用于PID初始化的结构体*/

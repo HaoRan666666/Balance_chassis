@@ -127,4 +127,6 @@ void DJIMotorEnable(DJIMotorInstance *motor);
  */
 void DJIMotorOuterLoop(DJIMotorInstance *motor, Closeloop_Type_e outer_loop);
 
+DJIMotorInstance *Get_DJI_Instance();
+
 #endif // !DJI_MOTOR_H

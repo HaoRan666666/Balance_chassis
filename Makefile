@@ -141,12 +141,17 @@ modules/can_comm/can_comm.c \
 modules/message_center/message_center.c \
 modules/daemon/daemon.c \
 modules/alarm/buzzer.c \
+modules/Leg_Model/Observer.c \
+modules/Leg_Model/Leg_Controller.c \
+modules/Leg_Model/LQR.c \
+modules/Leg_Model/Motion_Controller.c \
+modules/Leg_Model/MotionEstimation.c \
 application/gimbal/gimbal.c \
 application/chassis/chassis.c \
 application/shoot/shoot.c \
 application/cmd/robot_cmd.c \
 application/robot.c \
-Core/Src/i2c.c
+Core/Src/i2c.c 
 
 # ASM sources
 ASM_SOURCES =  \
@@ -257,6 +262,7 @@ C_INCLUDES =  \
 -Imodules/daemon \
 -Imodules/alarm \
 -Imodules \
+-Imodules/Leg_Model \
 -IMiddlewares/ST/ARM/DSP/Inc \
 -IMiddlewares/ST/ARM/DSP/Include/dsp \
 -IMiddlewares/Third_Party/SEGGER/RTT \

@@ -5,6 +5,8 @@
         "cmsis_os.h": "c",
         "memory.h": "c",
         "dmmotor.h": "c",
-        "can_comm.h": "c"
+        "can_comm.h": "c",
+        "ins_task.h": "c",
+        "dji_motor.h": "c"
     }
 }

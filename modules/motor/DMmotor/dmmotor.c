@@ -9,8 +9,14 @@
 #include "bsp_log.h"
 
 static uint8_t idx;
-static DMMotorInstance *dm_motor_instance[DM_MOTOR_CNT];
+ DMMotorInstance *dm_motor_instance[DM_MOTOR_CNT];
 static osThreadId dm_task_handle[DM_MOTOR_CNT];
+
+DMMotorInstance * Get_DM_Instance()
+{
+   return &dm_motor_instance;
+}
+
 /* 两个用于将uint值和float值进行映射的函数,在设定发送值和解析反馈值时使用 */
 static uint16_t float_to_uint(float x, float x_min, float x_max, uint8_t bits)
 {
