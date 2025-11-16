@@ -187,10 +187,12 @@ typedef struct
     // float real_vy;
     // float real_wz;
 
-    uint8_t rest_heat;           // 剩余枪口热量
+    uint16_t rest_heat;           // 剩余枪口热量   // 之前是uint8_t，但是裁判系统协议手册是16 不知道有什么深意，标个点
     Bullet_Speed_e bullet_speed; // 弹速限制
     Enemy_Color_e enemy_color;   // 0 for blue, 1 for red
 
+    uint16_t cooling_rate;        //冷却速率
+    uint16_t cooling_limit;       //热量上限
 } Chassis_Upload_Data_s;
 
 

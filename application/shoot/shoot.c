@@ -20,45 +20,6 @@ static float hibernate_time = 0, dead_time = 0;
 
 void ShootInit()
 {
-    // 左摩擦轮
-    Motor_Init_Config_s friction_config = {
-        .can_init_config = {
-            .can_handle = &hcan2,
-        },
-        .controller_param_init_config = {
-            .speed_PID = {
-                .Kp = 0, // 20
-                .Ki = 0, // 1
-                .Kd = 0,
-                .Improve = PID_Integral_Limit,
-                .IntegralLimit = 10000,
-                .MaxOut = 15000,
-            },
-            .current_PID = {
-                .Kp = 0, // 0.7
-                .Ki = 0, // 0.1
-                .Kd = 0,
-                .Improve = PID_Integral_Limit,
-                .IntegralLimit = 10000,
-                .MaxOut = 15000,
-            },
-        },
-        .controller_setting_init_config = {
-            .angle_feedback_source = MOTOR_FEED,
-            .speed_feedback_source = MOTOR_FEED,
-
-            .outer_loop_type = SPEED_LOOP,
-            .close_loop_type = SPEED_LOOP | CURRENT_LOOP,
-            .motor_reverse_flag = MOTOR_DIRECTION_NORMAL,
-        },
-        .motor_type = M3508};
-    friction_config.can_init_config.tx_id = 1,
-    friction_l = DJIMotorInit(&friction_config);
-
-    friction_config.can_init_config.tx_id = 2; // 右摩擦轮,改txid和方向就行
-    friction_config.controller_setting_init_config.motor_reverse_flag = MOTOR_DIRECTION_REVERSE;
-    friction_r = DJIMotorInit(&friction_config);
-
     // 拨盘电机
     Motor_Init_Config_s loader_config = {
         .can_init_config = {
@@ -96,7 +57,7 @@ void ShootInit()
             .close_loop_type = CURRENT_LOOP | SPEED_LOOP,
             .motor_reverse_flag = MOTOR_DIRECTION_NORMAL, // 注意方向设置为拨盘的拨出的击发方向
         },
-        .motor_type = M2006 // 英雄使用m3508
+        .motor_type = M2006 
     };
     loader = DJIMotorInit(&loader_config);
 
@@ -113,14 +74,10 @@ void ShootTask()
     // 对shoot mode等于SHOOT_STOP的情况特殊处理,直接停止所有电机(紧急停止)
     if (shoot_cmd_recv.shoot_mode == SHOOT_OFF)
     {
-        DJIMotorStop(friction_l);
-        DJIMotorStop(friction_r);
         DJIMotorStop(loader);
     }
     else // 恢复运行
     {
-        DJIMotorEnable(friction_l);
-        DJIMotorEnable(friction_r);
         DJIMotorEnable(loader);
     }
 

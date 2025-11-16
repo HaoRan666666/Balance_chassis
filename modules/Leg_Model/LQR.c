@@ -162,24 +162,24 @@ void LQR_Clc(float *Tl,float *Tpl,float *Tr,float *Tpr,float target_x,float targ
 			if(Balance_status->Leg_L.Fn<FN_Threshold)
 			{
 				(*Tl)=0;
-				(*Tpl)=K2_l[6]*Balance_status->Leg_L.phi_0+K2_l[7]*Balance_status->Leg_L.dphi_0;
+				(*Tpl)=K2_l[6]*Balance_status->Leg_L.theta+K2_l[7]*Balance_status->Leg_L.dtheta;
 			}
 			else
 			{
-				(*Tl)=K2_l[0]*Balance_status->Leg_L.phi_0+K2_l[1]*Balance_status->Leg_L.dphi_0+K2_l[2]*(Balance_status->body_data.x-target_x)+K2_l[3]*(Balance_status->body_data.dx-target_dx)+K2_l[4]*Balance_status->body_data.Pitch+K2_l[5]*Balance_status->body_data.d_pitch;
-				(*Tpl)=K2_l[6]*Balance_status->Leg_L.phi_0+K2_l[7]*Balance_status->Leg_L.dphi_0+K2_l[8]*(Balance_status->body_data.x-target_x)+K2_l[9]*(Balance_status->body_data.dx-target_dx)+K2_l[10]*Balance_status->body_data.Pitch+K2_l[11]*Balance_status->body_data.d_pitch;
+				(*Tl)=K2_l[0]*Balance_status->Leg_L.theta+K2_l[1]*Balance_status->Leg_L.dtheta+K2_l[2]*(Balance_status->body_data.x-target_x)+K2_l[3]*(Balance_status->body_data.dx-target_dx)+K2_l[4]*Balance_status->body_data.Pitch+K2_l[5]*Balance_status->body_data.d_pitch;
+				(*Tpl)=K2_l[6]*Balance_status->Leg_L.theta+K2_l[7]*Balance_status->Leg_L.dtheta+K2_l[8]*(Balance_status->body_data.x-target_x)+K2_l[9]*(Balance_status->body_data.dx-target_dx)+K2_l[10]*Balance_status->body_data.Pitch+K2_l[11]*Balance_status->body_data.d_pitch;
 				(*Tpl)=(*Tpl)-Delta_Tp_l;
 			}
 			
 			if(Balance_status->Leg_R.Fn<FN_Threshold)
 			{
 				(*Tl)=0;
-				(*Tpl)=K2_l[6]*Balance_status->Leg_R.phi_0+K2_l[7]*Balance_status->Leg_R.dphi_0;
+				(*Tpl)=K2_l[6]*Balance_status->Leg_R.theta+K2_l[7]*Balance_status->Leg_R.dtheta;
 			}
 			else
 			{
-				(*Tl)=K2_l[0]*Balance_status->Leg_R.phi_0+K2_l[1]*Balance_status->Leg_R.dphi_0+K2_l[2]*(Balance_status->body_data.x-target_x)+K2_l[3]*(Balance_status->body_data.dx-target_dx)+K2_l[4]*Balance_status->body_data.Pitch+K2_l[5]*Balance_status->body_data.d_pitch;
-				(*Tpl)=K2_l[6]*Balance_status->Leg_R.phi_0+K2_l[7]*Balance_status->Leg_R.dphi_0+K2_l[8]*(Balance_status->body_data.x-target_x)+K2_l[9]*(Balance_status->body_data.dx-target_dx)+K2_l[10]*Balance_status->body_data.Pitch+K2_l[11]*Balance_status->body_data.d_pitch;
+				(*Tl)=K2_l[0]*Balance_status->Leg_R.theta+K2_l[1]*Balance_status->Leg_R.dtheta+K2_l[2]*(Balance_status->body_data.x-target_x)+K2_l[3]*(Balance_status->body_data.dx-target_dx)+K2_l[4]*Balance_status->body_data.Pitch+K2_l[5]*Balance_status->body_data.d_pitch;
+				(*Tpl)=K2_l[6]*Balance_status->Leg_R.theta+K2_l[7]*Balance_status->Leg_R.dtheta+K2_l[8]*(Balance_status->body_data.x-target_x)+K2_l[9]*(Balance_status->body_data.dx-target_dx)+K2_l[10]*Balance_status->body_data.Pitch+K2_l[11]*Balance_status->body_data.d_pitch;
 				(*Tpl)=(*Tpl)-Delta_Tp_r;//mpc
 			}
 			

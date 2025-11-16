@@ -62,7 +62,7 @@ void ChassisInit()
     //髋关节电机初始化
     Motor_Init_Config_s chassis_DM_motor_config = {  
         .can_init_config.can_handle = &hcan1,
-        .controller_param_init_config = {
+        .controller_param_init_config = { 
             .speed_PID = {
                 .Kp = 10, // 4.5
                 .Ki = 0,  // 0
@@ -277,9 +277,12 @@ void ChassisTask()
     // // 我方颜色id小于7是红色,大于7是蓝色,注意这里发送的是对方的颜色, 0:blue , 1:red
     // chassis_feedback_data.enemy_color = referee_data->GameRobotState.robot_id > 7 ? 1 : 0;
     // // 当前只做了17mm热量的数据获取,后续根据robot_def中的宏切换双枪管和英雄42mm的情况
-    // chassis_feedback_data.bullet_speed = referee_data->GameRobotState.shooter_id1_17mm_speed_limit;
-    // chassis_feedback_data.rest_heat = referee_data->PowerHeatData.shooter_heat0;
 
+    //获得弹速限制和剩余热量，发送到云台
+    chassis_feedback_data.bullet_speed = referee_data->GameRobotState.shooter_id1_17mm_speed_limit;//弹速限制
+    chassis_feedback_data.rest_heat = referee_data->PowerHeatData.shooter_heat0;//剩余热量
+    chassis_feedback_data.cooling_rate=referee_data->GameRobotState.shooter_id1_17mm_cooling_rate;//枪口冷却速率
+    chassis_feedback_data.cooling_limit=referee_data->GameRobotState.shooter_id1_17mm_cooling_limit;//枪口热量上限
     // 推送反馈消息
 #ifdef ONE_BOARD
     PubPushMessage(chassis_pub, (void *)&chassis_feedback_data);
