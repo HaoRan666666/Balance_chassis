@@ -18,11 +18,13 @@
 #include "super_cap.h"
 #include "message_center.h"
 #include "referee_task.h"
-
+#include "Observer.h"
 #include "general_def.h"
 #include "bsp_dwt.h"
 #include "referee_UI.h"
 #include "arm_math.h"
+#include "LQR.h"
+#include "user_lib.h"
 
 /* 根据robot_def.h中的macro自动计算的参数 */
 #define HALF_WHEEL_BASE (WHEEL_BASE / 2.0f)     // 半轴距
@@ -50,12 +52,25 @@ static SuperCapInstance *cap;                                       // 超级电
 static DMMotorInstance *motor_lf, *motor_rf, *motor_lb, *motor_rb; //四个髋关节电机的实例
 static DJIMotorInstance *motor_left ,*motor_right;  //左右足端轮电机实例
 
+static Chassis_power_control_t power_control; // 底盘功率控制实例
 /* 用于自旋变速策略的时间变量 */
 // static float t;
 
 /* 私有函数计算的中介变量,设为静态避免参数传递的开销 */
 static float chassis_vx, chassis_vy;     // 将云台系的速度投影到底盘
 // static float vt_lf, vt_rf, vt_lb, vt_rb; // 底盘速度解算后的临时输出,待进行限幅
+
+//轮腿控制变量
+float Target_dx; 
+float Target_x;
+float Target_yaw;
+float Target_roll;
+float Target_L0;
+float w_Limit=2.5f;
+float YawTrack_Target;
+float Tl=0,Tpl=0  ,T1l=0,T2l=0,   Tr=0,Tpr=0,  T1r=0,T2r=0,   Fl=0,Fr=0;
+float Yaw_WheelDelta_T=0;//转向控制所需要叠加在轮子上的力矩差  注意用算出来的总力矩差除以2分配到两个轮子上
+
 
 void ChassisInit()
 {
@@ -185,6 +200,10 @@ void ChassisInit()
  */
 static void LimitChassisOutput()
 {
+    //首先把轮腿机器人的力矩分成四个部分
+
+
+
     // 功率限制待添加
     // referee_data->PowerHeatData.chassis_power;
     // referee_data->PowerHeatData.chassis_power_buffer;
@@ -290,4 +309,168 @@ void ChassisTask()
 #ifdef CHASSIS_BOARD
     CANCommSend(chasiss_can_comm, (void *)&chassis_feedback_data);
 #endif // CHASSIS_BOARD
+}
+
+
+
+static inline uint8_t floatequal(float a, float b)
+{
+    return fabs(a - b) < 1e-5;
+}
+
+
+/**
+ * @brief 底盘功率控制模块,根据裁判系统的功率数据和超级电容的剩余能量对底盘输出进行功率限制
+ *        先写一个不考虑超级电容的版本
+ */
+static void ChassisPowerControl()
+{
+    Balance_data * Balance_status;
+    float Chassis_target_speed; //底盘目标速度
+    float Chassis_target_x; //底盘目标位移
+    float Chassis_current_speed; //底盘当前速度
+    float Uspeed;               //速度和位移控制的叠加控制量
+    float Uyaw;                 //yaw控制所需要叠加在轮电机上的力矩
+    float wLeftWheel;           //左轮角速度
+    float leftUelse;            //左轮用于控制theta和phi所需的力矩
+    float wRightWheel;          //右轮角速度
+    float rightUelse;           //右轮用于控制theta和phi所需的力矩
+
+    Chassis_target_speed=Target_dx; 
+    Chassis_target_x=Target_x;
+    Chassis_current_speed= Balance_status->body_data.dx; 
+    Uspeed=Get_Uspeed(Chassis_target_x,Chassis_target_speed);  //左右轮暂时用一个变量，待验证正负号关系
+    Uyaw=Yaw_WheelDelta_T;
+    wLeftWheel=Balance_status->Leg_L.wheel.speed; //rad/s
+    wRightWheel=Balance_status->Leg_R.wheel.speed; //rad/s
+    leftUelse=Get_Uelse_L();
+    rightUelse=Get_Uelse_R();
+
+    //获取当前功率状态
+    power_control.power_limit=referee_data->GameRobotState.chassis_power_limit; //最大功率限制
+    //float chassis_power=// 裁判系统不返回底盘功率
+
+    if(floatequal(Uyaw,0.0f))
+    {
+        if(Uyaw*Uspeed>0) //同向
+        {
+            power_control.K=10000.0f;
+        }
+        else //反向
+        {
+             power_control.K=-10000.0f;
+        }
+    }
+    else  power_control.K=Uspeed/Uyaw;  //得到比例系数
+
+
+    float Total_T_left=leftUelse + Uspeed + Uyaw; //左轮总力矩
+    float Total_T_right=rightUelse + Uspeed - Uyaw; //右轮总力矩     Uyaw正负号关系待验证
+
+    //计算功率估计值
+    power_control.Estimated_Power= Total_T_left * wLeftWheel + power_control.K1 * fabs(wLeftWheel) + power_control.K2 * Total_T_left * Total_T_left + power_control.K3
+                             + Total_T_right * wRightWheel + power_control.K1 * fabs(wRightWheel) + power_control.K2 * Total_T_right * Total_T_right + power_control.K3;
+
+    if(power_control.Estimated_Power< power_control.power_limit) //当估计功率小于功率限制
+    {
+        //正常控制
+        power_control.restrictedUspeed=Uspeed;
+        power_control.restrictedUyaw=Uyaw;
+        power_control.decayUspeed=1.0;
+        power_control.decayUyaw=1.0;
+    }
+    else  //关键部分：关于预测功率大于限制功率的处理
+    {
+        float speed_error = Chassis_target_speed-Chassis_current_speed; // 计算速度误差
+        if(fabs(speed_error)>0.5f&&fabs(Chassis_current_speed)>0.5f&&(((Chassis_current_speed*Chassis_target_speed)<0.0f)||(Chassis_target_speed >= 0.0f && speed_error < 0.0f) ||
+             (Chassis_target_speed<= 0.0f && speed_error > 0.0f)))
+             {
+                 
+            //当底盘处于减速/制动阶段时，机械功率变得很小或为负（发电），
+            //此时总功率不会超限，因此应逐渐放松限制，使 decay 系数趋近于 1。
+            //这与反电动势导致功率下降有关，但核心原因是“主动制动阶段不会超功率”。
+            power_control.decayUspeed = power_control.decayUspeed * 0.97f + 1.0f * 0.03f;
+            power_control.decayUyaw   = power_control.decayUyaw * 0.97f + 1.0f * 0.03f;
+             }
+        else
+        {
+            //将轮腿的力矩带入电机功率模型方程得到一个关于Uyaw的二次方程   
+            float A = (power_control.K2 * (2.0f * powf(power_control.K, 2) + 2.0f));
+            float B = (2.0f * power_control.K2 * (power_control.K - 1.0f) * leftUelse) + (2.0f * power_control.K2 * (power_control.K + 1.0f) * rightUelse) +
+                        (wLeftWheel * (power_control.K - 1.0f)) + (wRightWheel * (power_control.K + 1.0f));
+            float C = (wLeftWheel * leftUelse) + (wRightWheel * rightUelse) +
+                        (power_control.K1 * (fabs(wLeftWheel) + fabs(wRightWheel))) +
+                        (power_control.K2 * (powf(leftUelse, 2) + powf(rightUelse, 2))) + power_control.K3 - power_control.power_limit;
+
+            power_control.Delta = powf(B, 2) - 4 * A * C;   //B^2-4AC
+
+            if( power_control.Delta==0)  //重根情况
+            {
+                float temp_Uyaw=-B/(2*A); //求此时的二次函数极值
+
+                if(temp_Uyaw*Uyaw>0.0f)  //不能因为功率控制而改变转向的方向
+                {
+                    power_control.restrictedUyaw=temp_Uyaw;
+                }
+                else
+                {
+                    power_control.restrictedUyaw=0;
+                }
+
+                power_control.restrictedUspeed=power_control.K*power_control.restrictedUyaw;  //之前规定过一定比例关系
+            }
+            else if (power_control.Delta>0) //不等根情况
+            {
+                 //计算出两个解
+                float tempUyaw1 = (-B - sqrtf(power_control.Delta)) / (2.0f * A); 
+                float tempUyaw2 = (-B + sqrtf(power_control.Delta)) / (2.0f * A);
+                /*
+                解出的两个根表示：
+                满足功率极限的两个可能的 yaw 控制量
+                但运动方向不允许变化→ 所以必须选择与原 Uyaw 同号的根
+                如果两个根都同号 → 选择更“接近原指令”的那个（更大或更小）
+                如果没有同号 → 直接降到 0（完全禁掉 yaw）*/
+                if (tempUyaw1 * Uyaw > 0.0f && tempUyaw2 * Uyaw > 0.0f) //两个解都与原yaw力矩同向
+                {
+                    if (Uyaw > 0.0f)//原yaw力矩为正
+                        power_control.restrictedUyaw = fmax(tempUyaw1, tempUyaw2);
+                    else //原yaw力矩为负
+                        power_control.restrictedUyaw = fmin(tempUyaw1, tempUyaw2); 
+                } 
+                else if (tempUyaw1 * Uyaw > 0.0f) //只有第一个解与原yaw力矩同向
+                    power_control.restrictedUyaw = tempUyaw1;
+                else if (tempUyaw2 * Uyaw > 0.0f) //只有第二个解与原yaw力矩同向
+                    power_control.restrictedUyaw = tempUyaw2;
+                else //两个解都与原yaw力矩反向
+                    power_control.restrictedUyaw = 0.0f;   
+
+                power_control.restrictedUspeed = power_control.K * power_control.restrictedUyaw;
+            }
+            else if (power_control.Delta<0)  //虚根情况
+            {
+                float tempUyaw = (-B) / (2.0f * A);//取实部
+
+                if (tempUyaw * Uyaw > 0.0f) 
+                    power_control.restrictedUyaw = tempUyaw;
+                else
+                    power_control.restrictedUyaw = 0.0f;
+
+                power_control.restrictedUspeed = power_control.K * power_control.restrictedUyaw;
+            }
+              //计算衰减系数
+            float tempDecayUspeed = power_control.restrictedUspeed / Uspeed; 
+            float tempDecayUyaw   = power_control.restrictedUyaw / Uyaw; 
+            //限制衰减系数在0.01到1.00之间
+            tempDecayUspeed = float_constrain(tempDecayUspeed, 0.01f, 1.00f); 
+            tempDecayUyaw   = float_constrain(tempDecayUyaw, 0.01f, 1.00f);
+
+            power_control.decayUspeed = tempDecayUspeed * 0.1f + power_control.decayUspeed * 0.9f; 
+            power_control.decayUyaw   = tempDecayUyaw * 0.1f + power_control.decayUyaw * 0.9f;     
+        }     
+    }
+    float restrictedLeftTotalTorque  = power_control.restrictedUspeed - power_control.restrictedUyaw + leftUelse; //左轮受限总力矩
+    float restrictedRightTotalTorque = power_control.restrictedUspeed + power_control.restrictedUyaw + rightUelse; //右轮受限总力矩
+
+    power_control.restrictedPower = restrictedLeftTotalTorque * wLeftWheel + power_control.K1 * fabs(wLeftWheel) + power_control.K2 * restrictedLeftTotalTorque * restrictedLeftTotalTorque + power_control.K3
+                                  + restrictedRightTotalTorque * wRightWheel + power_control.K1 * fabs(wRightWheel) + power_control.K2 * restrictedRightTotalTorque * restrictedRightTotalTorque + power_control.K3;
 }

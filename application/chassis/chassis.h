@@ -13,4 +13,27 @@ void ChassisInit();
  */
 void ChassisTask();
 
+
+// 底盘功率控制结构体
+typedef struct 
+{ 
+    float power_limit;        // 当前功率限制值
+    float K;      // 速度控制力矩与yaw控制力矩的比例系数
+    float K1;  //电机功率模型中的系数
+    float K2;  //电机功率模型中的系数
+    float K3;  //电机功率模型中的系数
+    float Estimated_Power;  // 估计功率    // 法一： P=tau*omega + K1*|omega| + K2*tau^2 + K3     法二：P=tau*omega+K1*omega^2+K2*tau^2+K3 
+
+    float restrictedUspeed;  //限制后的速度控制功率
+    float restrictedUyaw;    //限制后的yaw控制功率
+
+    float decayUspeed ;  //速度控制力矩衰减系数
+    float decayUyaw   ;  //yaw控制力矩衰减系数
+
+    float Delta ;
+
+    float restrictedPower; //限制过后的功率
+
+}Chassis_power_control_t;
+
 #endif // CHASSIS_H

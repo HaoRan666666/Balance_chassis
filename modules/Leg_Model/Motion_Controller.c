@@ -39,7 +39,7 @@ void Motion_Controller_Yaw_Control(float target_Yaw,float *LeftWheel_DeltaT,floa
 
     phi_dot=float_constrain(phi_dot,Body_w_min,Body_w_max);//限幅
 
-    float T=YAW_Controll_LQR_Speed_K *(body_status->d_Yaw+phi_dot);//这里为什么要加上d_Yaw
+    float T=YAW_Controll_LQR_Speed_K *(body_status->d_Yaw+phi_dot);
 
     (*LeftWheel_DeltaT)=-T/2.0f;     //正负有待验证
     (*RightWheel_DeltaT)=T/2.0f;

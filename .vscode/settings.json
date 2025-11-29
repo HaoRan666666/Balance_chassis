@@ -7,6 +7,8 @@
         "dmmotor.h": "c",
         "can_comm.h": "c",
         "ins_task.h": "c",
-        "dji_motor.h": "c"
+        "dji_motor.h": "c",
+        "observer.h": "c",
+        "balance.h": "c"
     }
 }

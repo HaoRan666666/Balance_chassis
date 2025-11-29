@@ -87,7 +87,7 @@ void MotionEstimation_MeasureUpdate(void)
  */
 void MotionEstimation_Update(void)
 {
-    MotionEstimation_Update();
+    MotionEstimation_MeasureUpdate();
     Balance_data* Balance_data=Get_Balance_Data();
     //未滤波位置和速度保存
     Balance_data->body_data.MotionEstimation.v_nofilter=0.5f*(Balance_data->Leg_L.wheel.speed*Wheel_R + Balance_data->Leg_R.wheel.speed*Wheel_R);

@@ -1,10 +1,11 @@
 #include "stm32h7xx.h"            
 #include "Observer.h"
-#include "balance.h"
 
-#define ChangeK 0
-#define MPC 0
+
+
 #define FN_Threshold 5.0f//支持力阈值 
+
+float K2_l[12]={0},K2_r[12]={0};
 
 	float K2_p11[4]={20.4392,94.2238,-155.5329,1.7024};//根据经验公式展开之后的系数
 	float K2_p12[4]={55.9817,-50.4603,-8.3689,0.2381};
@@ -19,6 +20,39 @@
 	float K2_p25[4]={1343.4311,-1608.5975,710.8411,-33.7040};
 	float K2_p26[4]={153.3062,-189.6469,88.1234,-8.8669};
 
+/*
+ *函数简介:根据目标位移和速度计算 由x和dx控制所需的速度控制量
+ *参数说明:目标位移x
+ *参数说明:目标速度dx
+ *返回类型:速度控制量
+ *备注:无
+ */
+float Get_Uspeed(float target_x,float target_dx)
+{
+	Balance_data*  Balance_status  = Get_Balance_Data();
+	return K2_r[8]*(Balance_status->body_data.x-target_x)+K2_r[9]*(Balance_status->body_data.dx-target_dx);//TODO验证一下左右是不是一样的
+}
+
+/*
+ *函数简介:根据目标位移和速度计算 由theta和phi控制所需的轮子控制量
+ *参数说明:目标位移x
+ *参数说明:目标速度dx
+ *返回类型:轮子控制量
+ *备注:无
+ */
+float Get_Uelse_R(void)
+{
+	Balance_data*  Balance_status  = Get_Balance_Data();
+	return K2_r[6]*Balance_status->Leg_R.theta+K2_r[7]*Balance_status->Leg_R.dtheta+K2_r[10]*Balance_status->body_data.Pitch+K2_r[11]*Balance_status->body_data.d_pitch;
+}
+
+float Get_Uelse_L(void)
+{
+	Balance_data*  Balance_status  = Get_Balance_Data();	
+	return K2_l[6]*Balance_status->Leg_L.theta+K2_l[7]*Balance_status->Leg_L.dtheta+K2_l[10]*Balance_status->body_data.Pitch+K2_l[11]*Balance_status->body_data.d_pitch;
+}
+
+
     /*
  *函数简介:LQR计算
  *参数说明:左轮T
@@ -30,41 +64,14 @@
  *返回类型:无
  *备注:无
  */
-float K2_l[12],K2_r[12],MPC_l[12],MPC_r[12];
+
 
 void LQR_Clc(float *Tl,float *Tpl,float *Tr,float *Tpr,float target_x,float target_dx)
 {
 	{
-		#ifndef ChangeK
-			float *K;
-			K=K2;
-		
-			if(Observer_BalanceStatus.LeftLeg.FN<FN_Threshold)
-			{
-				(*Tl)=0;
-				(*Tpl)=K[6]*Observer_BalanceStatus.LeftLeg.theta+K[7]*Observer_BalanceStatus.LeftLeg.dtheta;
-			}
-			else
-			{
-				(*Tl)=K[0]*Observer_BalanceStatus.LeftLeg.theta+K[1]*Observer_BalanceStatus.LeftLeg.dtheta+K[2]*(Observer_BalanceStatus.Body.x-target_x)+K[3]*(Observer_BalanceStatus.Body.dx-target_dx)+K[4]*Observer_BalanceStatus.Body.Pitch+K[5]*Observer_BalanceStatus.Body.dPitch;
-				(*Tpl)=K[6]*Observer_BalanceStatus.LeftLeg.theta+K[7]*Observer_BalanceStatus.LeftLeg.dtheta+K[8]*(Observer_BalanceStatus.Body.x-target_x)+K[9]*(Observer_BalanceStatus.Body.dx-target_dx)+K[10]*Observer_BalanceStatus.Body.Pitch+K[11]*Observer_BalanceStatus.Body.dPitch;
-			}
-			
-			if(Observer_BalanceStatus.RightLeg.FN<FN_Threshold)
-			{
-				(*Tr)=0;
-				(*Tpr)=K[6]*Observer_BalanceStatus.RightLeg.theta+K[7]*Observer_BalanceStatus.RightLeg.dtheta;
-			}
-			else
-			{
-				(*Tr)=K[0]*Observer_BalanceStatus.RightLeg.theta+K[1]*Observer_BalanceStatus.RightLeg.dtheta+K[2]*(Observer_BalanceStatus.Body.x-target_x)+K[3]*(Observer_BalanceStatus.Body.dx-target_dx)+K[4]*Observer_BalanceStatus.Body.Pitch+K[5]*Observer_BalanceStatus.Body.dPitch;
-				(*Tpr)=K[6]*Observer_BalanceStatus.RightLeg.theta+K[7]*Observer_BalanceStatus.RightLeg.dtheta+K[8]*(Observer_BalanceStatus.Body.x-target_x)+K[9]*(Observer_BalanceStatus.Body.dx-target_dx)+K[10]*Observer_BalanceStatus.Body.Pitch+K[11]*Observer_BalanceStatus.Body.dPitch;
-			}
-		#else
 		    Balance_data*  Balance_status  = Get_Balance_Data();
 			float L0_l=Balance_status->Leg_L.L0;
 			float L0_r=Balance_status->Leg_R.L0;
-			float Delta_Tp_l=0,Delta_Tp_r=0;
 			
 			K2_l[0]=K2_p11[0]*L0_l*L0_l*L0_l+K2_p11[1]*L0_l*L0_l+K2_p11[2]*L0_l+K2_p11[3];
 			K2_l[1]=K2_p12[0]*L0_l*L0_l*L0_l+K2_p12[1]*L0_l*L0_l+K2_p12[2]*L0_l+K2_p12[3];
@@ -94,95 +101,33 @@ void LQR_Clc(float *Tl,float *Tpl,float *Tr,float *Tpr,float target_x,float targ
 			K2_r[10]=K2_p25[0]*L0_r*L0_r*L0_r+K2_p25[1]*L0_r*L0_r+K2_p25[2]*L0_r+K2_p25[3];
 			K2_r[11]=K2_p26[0]*L0_r*L0_r*L0_r+K2_p26[1]*L0_r*L0_r+K2_p26[2]*L0_r+K2_p26[3];
 			
-			#ifndef MPC
-				static float Last_theta_l,Last_theta_r,Last_dtheta_l,Last_dtheta_r;
-				static float Last_x,Last_dx,Last_Pitch,Last_dPitch;
 			
-				MPC_l[0]=MPC_p1[0]*expf(MPC_p1[1]*L0_l)+MPC_p1[2]*expf(MPC_p1[3]*L0_l);
-				MPC_l[1]=MPC_p2[0]*expf(MPC_p2[1]*L0_l)+MPC_p2[2]*expf(MPC_p2[3]*L0_l);
-				MPC_l[2]=MPC_p3[0]*expf(MPC_p3[1]*L0_l)+MPC_p3[2]*expf(MPC_p3[3]*L0_l);
-				MPC_l[3]=MPC_p4[0]*expf(MPC_p4[1]*L0_l)+MPC_p4[2]*expf(MPC_p4[3]*L0_l);
-				MPC_l[4]=MPC_p5[0]*expf(MPC_p5[1]*L0_l)+MPC_p5[2]*expf(MPC_p5[3]*L0_l);
-				MPC_l[5]=MPC_p6[0]*expf(MPC_p6[1]*L0_l)+MPC_p6[2]*expf(MPC_p6[3]*L0_l);
-				MPC_l[6]=MPC_p7[0]*expf(MPC_p7[1]*L0_l)+MPC_p7[2]*expf(MPC_p7[3]*L0_l);
-				MPC_l[7]=MPC_p8[0]*expf(MPC_p8[1]*L0_l)+MPC_p8[2]*expf(MPC_p8[3]*L0_l);
-				MPC_l[8]=MPC_p9[0]*expf(MPC_p9[1]*L0_l)+MPC_p9[2]*expf(MPC_p9[3]*L0_l);
-				MPC_l[9]=MPC_p10[0]*expf(MPC_p10[1]*L0_l)+MPC_p10[2]*expf(MPC_p10[3]*L0_l);
-				MPC_l[10]=MPC_p11[0]*expf(MPC_p11[1]*L0_l)+MPC_p11[2]*expf(MPC_p11[3]*L0_l);
-				MPC_l[11]=MPC_p12[0]*expf(MPC_p12[1]*L0_l)+MPC_p12[2]*expf(MPC_p12[3]*L0_l);
-
-				MPC_r[0]=MPC_p1[0]*expf(MPC_p1[1]*L0_r)+MPC_p1[2]*expf(MPC_p1[3]*L0_r);
-				MPC_r[1]=MPC_p2[0]*expf(MPC_p2[1]*L0_r)+MPC_p2[2]*expf(MPC_p2[3]*L0_r);
-				MPC_r[2]=MPC_p3[0]*expf(MPC_p3[1]*L0_r)+MPC_p3[2]*expf(MPC_p3[3]*L0_r);
-				MPC_r[3]=MPC_p4[0]*expf(MPC_p4[1]*L0_r)+MPC_p4[2]*expf(MPC_p4[3]*L0_r);
-				MPC_r[4]=MPC_p5[0]*expf(MPC_p5[1]*L0_r)+MPC_p5[2]*expf(MPC_p5[3]*L0_r);
-				MPC_r[5]=MPC_p6[0]*expf(MPC_p6[1]*L0_r)+MPC_p6[2]*expf(MPC_p6[3]*L0_r);
-				MPC_r[6]=MPC_p7[0]*expf(MPC_p7[1]*L0_r)+MPC_p7[2]*expf(MPC_p7[3]*L0_r);
-				MPC_r[7]=MPC_p8[0]*expf(MPC_p8[1]*L0_r)+MPC_p8[2]*expf(MPC_p8[3]*L0_r);
-				MPC_r[8]=MPC_p9[0]*expf(MPC_p9[1]*L0_r)+MPC_p9[2]*expf(MPC_p9[3]*L0_r);
-				MPC_r[9]=MPC_p10[0]*expf(MPC_p10[1]*L0_r)+MPC_p10[2]*expf(MPC_p10[3]*L0_r);
-				MPC_r[10]=MPC_p11[0]*expf(MPC_p11[1]*L0_r)+MPC_p11[2]*expf(MPC_p11[3]*L0_r);
-				MPC_r[11]=MPC_p12[0]*expf(MPC_p12[1]*L0_r)+MPC_p12[2]*expf(MPC_p12[3]*L0_r);
-				
-				K2_l[6]=K2_l[6]-MPC_l[6];
-				K2_l[7]=K2_l[7]-MPC_l[7];
-				K2_l[8]=K2_l[8]-MPC_l[8];
-				K2_l[9]=K2_l[9]-MPC_l[9];
-				K2_l[10]=K2_l[10]-MPC_l[10];
-				K2_l[11]=K2_l[11]-MPC_l[11];
-
-				K2_r[6]=K2_r[6]-MPC_r[6];
-				K2_r[7]=K2_r[7]-MPC_r[7];
-				K2_r[8]=K2_r[8]-MPC_r[8];
-				K2_r[9]=K2_r[9]-MPC_r[9];
-				K2_r[10]=K2_r[10]-MPC_r[10];
-				K2_r[11]=K2_r[11]-MPC_r[11];
-
-				float Delta_theta_l=Observer_BalanceStatus.LeftLeg.theta-Last_theta_l;
-				float Delta_theta_r=Observer_BalanceStatus.RightLeg.theta-Last_theta_r;
-				float Delta_dtheta_l=Observer_BalanceStatus.LeftLeg.dtheta-Last_dtheta_l;
-				float Delta_dtheta_r=Observer_BalanceStatus.RightLeg.dtheta-Last_dtheta_r;
-				float Delta_x=Observer_BalanceStatus.Body.x-Last_x;
-				float Delta_dx=Observer_BalanceStatus.Body.dx-Last_dx;
-				float Delta_Pitch=Observer_BalanceStatus.Body.Pitch-Last_Pitch;
-				float Delta_dPitch=Observer_BalanceStatus.Body.dPitch-Last_dPitch;
-				Delta_Tp_l=MPC_l[0]*Delta_theta_l+MPC_l[1]*Delta_dtheta_l+MPC_l[2]*Delta_x+MPC_l[3]*Delta_dx+MPC_l[4]*Delta_Pitch+MPC_l[5]*Delta_dPitch;
-				Delta_Tp_r=MPC_r[0]*Delta_theta_r+MPC_r[1]*Delta_dtheta_r+MPC_r[2]*Delta_x+MPC_r[3]*Delta_dx+MPC_r[4]*Delta_Pitch+MPC_r[5]*Delta_dPitch;
-				
-				Last_theta_l=Observer_BalanceStatus.LeftLeg.theta;
-				Last_theta_r=Observer_BalanceStatus.RightLeg.theta;
-				Last_dtheta_l=Observer_BalanceStatus.LeftLeg.dtheta;
-				Last_dtheta_r=Observer_BalanceStatus.RightLeg.dtheta;
-				Last_x=Observer_BalanceStatus.Body.x;
-				Last_dx=Observer_BalanceStatus.Body.dx;
-				Last_Pitch=Observer_BalanceStatus.Body.Pitch;
-				Last_dPitch=Observer_BalanceStatus.Body.dPitch;
-			#endif
-			
+			//先当板凳调
 			if(Balance_status->Leg_L.Fn<FN_Threshold)
 			{
-				(*Tl)=0;
+				// (*Tl)=0;
 				(*Tpl)=K2_l[6]*Balance_status->Leg_L.theta+K2_l[7]*Balance_status->Leg_L.dtheta;
 			}
 			else
 			{
-				(*Tl)=K2_l[0]*Balance_status->Leg_L.theta+K2_l[1]*Balance_status->Leg_L.dtheta+K2_l[2]*(Balance_status->body_data.x-target_x)+K2_l[3]*(Balance_status->body_data.dx-target_dx)+K2_l[4]*Balance_status->body_data.Pitch+K2_l[5]*Balance_status->body_data.d_pitch;
+				// (*Tl)=K2_l[0]*Balance_status->Leg_L.theta+K2_l[1]*Balance_status->Leg_L.dtheta+K2_l[2]*(Balance_status->body_data.x-target_x)+K2_l[3]*(Balance_status->body_data.dx-target_dx)+K2_l[4]*Balance_status->body_data.Pitch+K2_l[5]*Balance_status->body_data.d_pitch;
 				(*Tpl)=K2_l[6]*Balance_status->Leg_L.theta+K2_l[7]*Balance_status->Leg_L.dtheta+K2_l[8]*(Balance_status->body_data.x-target_x)+K2_l[9]*(Balance_status->body_data.dx-target_dx)+K2_l[10]*Balance_status->body_data.Pitch+K2_l[11]*Balance_status->body_data.d_pitch;
-				(*Tpl)=(*Tpl)-Delta_Tp_l;
 			}
 			
 			if(Balance_status->Leg_R.Fn<FN_Threshold)
 			{
-				(*Tl)=0;
-				(*Tpl)=K2_l[6]*Balance_status->Leg_R.theta+K2_l[7]*Balance_status->Leg_R.dtheta;
+				// (*Tr)=0;
+				(*Tpr)=K2_r[6]*Balance_status->Leg_R.theta+K2_r[7]*Balance_status->Leg_R.dtheta;
 			}
 			else
 			{
-				(*Tl)=K2_l[0]*Balance_status->Leg_R.theta+K2_l[1]*Balance_status->Leg_R.dtheta+K2_l[2]*(Balance_status->body_data.x-target_x)+K2_l[3]*(Balance_status->body_data.dx-target_dx)+K2_l[4]*Balance_status->body_data.Pitch+K2_l[5]*Balance_status->body_data.d_pitch;
-				(*Tpl)=K2_l[6]*Balance_status->Leg_R.theta+K2_l[7]*Balance_status->Leg_R.dtheta+K2_l[8]*(Balance_status->body_data.x-target_x)+K2_l[9]*(Balance_status->body_data.dx-target_dx)+K2_l[10]*Balance_status->body_data.Pitch+K2_l[11]*Balance_status->body_data.d_pitch;
-				(*Tpl)=(*Tpl)-Delta_Tp_r;//mpc
+
+				// (*Tr)=K2_r[0]*Balance_status->Leg_R.theta+K2_r[1]*Balance_status->Leg_R.dtheta+K2_r[2]*(Balance_status->body_data.x-target_x)+K2_r[3]*(Balance_status->body_data.dx-target_dx)+K2_r[4]*Balance_status->body_data.Pitch+K2_r[5]*Balance_status->body_data.d_pitch;
+				(*Tpr)=K2_r[6]*Balance_status->Leg_R.theta+K2_r[7]*Balance_status->Leg_R.dtheta+K2_r[8]*(Balance_status->body_data.x-target_x)+K2_r[9]*(Balance_status->body_data.dx-target_dx)+K2_r[10]*Balance_status->body_data.Pitch+K2_r[11]*Balance_status->body_data.d_pitch;
 			}
 			
-		#endif
 	}
 }
+
+
+

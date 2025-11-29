@@ -1,0 +1,227 @@
+#include "AnalyticalPowerManager.hpp"
+
+#include "BalancedInfantryConfig.hpp"
+#include "FreeRTOS.h"
+#include "PID.hpp"
+#include "RefereeMess.hpp"
+#include "SuperCapaManager.hpp"
+#include "math.h"
+#include "task.h"
+
+//香港科技大学平衡步兵功率控制算法
+
+namespace Chassis
+{
+namespace AnalyticalPowerManager
+{
+using namespace Core::Control;
+
+const TickType_t xTimeInterval = pdMS_TO_TICKS(SYSTEM_TIME_INTERVAL);  // ms
+
+const SuperCapacitor::CapacitorStatus &capStatus = Core::Control::SuperCapacitor::getStatus();//获取超电状态
+
+const volatile RefereeMess::RefereeData &refereeDataCopy = RefereeMess::getRefereeData();//获取裁判系统信息
+
+Manager power_controlmanager;
+
+PID::Param powerPDParam(50.0f, 0.0f, 0.20f, 0.0f, 300.0f, 0.0f, 0.0f, 0.2f, 100UL);  // 电容能量环
+PID powerPD(powerPDParam);
+
+static inline bool floatEqual(float a, float b) { return fabs(a - b) < 1e-5f; }
+
+void Manager::setMode(MODE currentMode) { manager.mode = currentMode; }
+//
+float Manager::getDecayUspeed() { return manager.decayUspeed; }
+float Manager::getDecayUyaw() { return manager.decayUyaw; }
+float Manager::getConfiguredMaxPower() { return manager.configuredMaxPower; }
+
+void Manager::update(float chassisTargetSpeed,  //目标速度
+                     float chassisCurrentSpeed,  //当前速度
+                     float Uspeed,              //速度控制所需要叠加在轮电机上的力矩
+                     float Uyaw,                //yaw控制所需要叠加在轮电机上的力矩
+                     float wLeftWheel,          //左轮角速度
+                     float leftUelse,           //左轮用于控制theta和phi所需的力矩
+                     float wRightWheel,         
+                     float rightUelse)
+{
+    manager.chassisTargetSpeed  = chassisTargetSpeed;
+    manager.chassisCurrentSpeed = chassisCurrentSpeed;
+    manager.Uspeed              = Uspeed;
+    manager.Uyaw                = Uyaw;
+    manager.wLeftWheel          = wLeftWheel;
+    manager.leftUelse           = leftUelse;
+    manager.wRightWheel         = wRightWheel;
+    manager.rightUelse          = rightUelse;
+
+    if (floatEqual(Uyaw, 0.0f))  //yaw控制力矩约等于0
+    {
+        if (Uspeed * Uyaw > 0.0f) //速度力矩和yaw控制力矩同向
+            manager.K = 10000.0f;
+        else
+            manager.K = -10000.0f;
+    }
+    else
+        manager.K = Uspeed / Uyaw; //    ！！！为了使速度控制力矩和yaw控制力矩成比例变化
+
+    float leftTotalTorque  = Uspeed - Uyaw + leftUelse;
+    float rightTotalTorque = Uspeed + Uyaw + rightUelse;
+
+    //通过电机功率模型预测的底盘功率
+    manager.cmdPower = (manager.k1 * (ABS(wLeftWheel) + ABS(wRightWheel))) + (manager.k2 * (powf(leftTotalTorque, 2) + powf(rightTotalTorque, 2))) +
+                       manager.k3 + (wLeftWheel * leftTotalTorque) + (wRightWheel * rightTotalTorque);
+   
+    if (manager.cmdPower <= manager.configuredMaxPower) //如果小于功率限制 ，将衰减系数设置为1（不做缩放）
+    {
+        manager.restrictedUspeed = manager.Uspeed;
+        manager.restrictedUyaw   = manager.Uyaw;
+
+        manager.decayUspeed = 1.0f;
+        manager.decayUyaw   = 1.0f;
+    }
+    else     //关键部分：关于预测功率大于限制功率的处理
+    {
+        //当前速度误差
+        float speedError = manager.chassisTargetSpeed - manager.chassisCurrentSpeed;
+        //如果速度误差较大且底盘当前速度较大且底盘目标速度与当前速度方向相反，或者目标速度大于0且速度误差小于0，或者目标速度小于0且速度误差大于0
+        if (ABS(speedError) > 0.5f && ABS(manager.chassisCurrentSpeed) > 0.5f &&
+            ((manager.chassisTargetSpeed * manager.chassisCurrentSpeed < 0.0f) || (manager.chassisTargetSpeed >= 0.0f && speedError < 0.0f) ||
+             (manager.chassisTargetSpeed <= 0.0f && speedError > 0.0f)))
+        {
+            
+            //当底盘处于减速/制动阶段时，机械功率变得很小或为负（发电），
+            //此时总功率不会超限，因此应逐渐放松限制，使 decay 系数趋近于 1。
+            //这与反电动势导致功率下降有关，但核心原因是“主动制动阶段不会超功率”。
+            manager.decayUspeed = manager.decayUspeed * 0.97f + 1.0f * 0.03f;
+            manager.decayUyaw   = manager.decayUyaw * 0.97f + 1.0f * 0.03f;
+        }
+        else
+        {
+            // calculate the restricted Uspeed and Uyaw 计算受限的Uspeed和Uyaw
+            //将轮腿的力矩带入电机功率模型方程得到一个关于Uyaw的二次方程   
+            manager.A = (manager.k2 * (2.0f * powf(manager.K, 2) + 2.0f));
+            manager.B = (2.0f * manager.k2 * (manager.K - 1.0f) * manager.leftUelse) + (2.0f * manager.k2 * (manager.K + 1.0f) * manager.rightUelse) +
+                        (manager.wLeftWheel * (manager.K - 1.0f)) + (manager.wRightWheel * (manager.K + 1.0f));
+            manager.C = (manager.wLeftWheel * manager.leftUelse) + (manager.wRightWheel * manager.rightUelse) +
+                        (manager.k1 * (ABS(manager.wLeftWheel) + ABS(manager.wRightWheel))) +
+                        (manager.k2 * (powf(manager.leftUelse, 2) + powf(manager.rightUelse, 2))) + manager.k3 - manager.configuredMaxPower;
+
+            manager.Delta = powf(manager.B, 2) - 4 * manager.A * manager.C;   //B^2-4AC
+
+            if (floatEqual(manager.Delta, 0.0f))  // repeat roots 重根
+            {
+                float tempUyaw = (-manager.B) / (2.0f * manager.A);
+
+                if (tempUyaw * manager.Uyaw > 0.0f)  //计算出的受限yaw力矩与原yaw力矩同向
+                    manager.restrictedUyaw = tempUyaw;  //则采用计算值
+                else
+                    manager.restrictedUyaw = 0.0f;    //否则设为0
+
+                manager.restrictedUspeed = manager.K * manager.restrictedUyaw;  //之前规定过一定比例关系
+            }
+            else if (manager.Delta > 0.0f)  // distinct roots  //不等根
+            {
+                //计算出两个解
+                float tempUyaw1 = (-manager.B - sqrtf(manager.Delta)) / (2.0f * manager.A); 
+                float tempUyaw2 = (-manager.B + sqrtf(manager.Delta)) / (2.0f * manager.A);
+
+                //这里还不是很理解为什么要这么选
+                /*
+                解出的两个根表示：
+
+                满足功率极限的两个可能的 yaw 控制量
+
+                但运动方向不允许变化
+                → 所以必须选择与原 Uyaw 同号的根
+
+                如果两个根都同号 → 选择更“接近原指令”的那个（更大或更小）
+
+                如果没有同号 → 直接降到 0（完全禁掉 yaw）*/
+                if (tempUyaw1 * manager.Uyaw > 0.0f && tempUyaw2 * manager.Uyaw > 0.0f) //两个解都与原yaw力矩同向
+                {
+                    if (manager.Uyaw > 0.0f)//原yaw力矩为正
+                        manager.restrictedUyaw = fmax(tempUyaw1, tempUyaw2);
+                    else //原yaw力矩为负
+                        manager.restrictedUyaw = fmin(tempUyaw1, tempUyaw2); 
+                } 
+                else if (tempUyaw1 * manager.Uyaw > 0.0f) //只有第一个解与原yaw力矩同向
+                    manager.restrictedUyaw = tempUyaw1;
+                else if (tempUyaw2 * manager.Uyaw > 0.0f) //只有第二个解与原yaw力矩同向
+                    manager.restrictedUyaw = tempUyaw2;
+                else //两个解都与原yaw力矩反向
+                    manager.restrictedUyaw = 0.0f;   
+
+                manager.restrictedUspeed = manager.K * manager.restrictedUyaw;
+            }
+            else if (manager.Delta < 0.0f)  // imaginary roots 虚根
+            {
+                float tempUyaw = (-manager.B) / (2.0f * manager.A);//取实部
+
+                if (tempUyaw * manager.Uyaw > 0.0f) 
+                    manager.restrictedUyaw = tempUyaw;
+                else
+                    manager.restrictedUyaw = 0.0f;
+
+                manager.restrictedUspeed = manager.K * manager.restrictedUyaw;
+            }
+            //计算衰减系数
+            float tempDecayUspeed = manager.restrictedUspeed / Uspeed; 
+            float tempDecayUyaw   = manager.restrictedUyaw / Uyaw; 
+            //限制衰减系数在0.01到1.00之间
+            tempDecayUspeed = CLAMP(tempDecayUspeed, 0.01f, 1.00f); 
+            tempDecayUyaw   = CLAMP(tempDecayUyaw, 0.01f, 1.00f);
+
+            manager.decayUspeed = tempDecayUspeed * 0.1f + manager.decayUspeed * 0.9f; 
+            manager.decayUyaw   = tempDecayUyaw * 0.1f + manager.decayUyaw * 0.9f;     
+        }
+    }
+
+    float restrictedLeftTotalTorque  = manager.restrictedUspeed - manager.restrictedUyaw + leftUelse; //左轮受限总力矩
+    float restrictedRightTotalTorque = manager.restrictedUspeed + manager.restrictedUyaw + rightUelse; //右轮受限总力矩
+
+    manager.restrictedPower = (manager.k1 * (ABS(wLeftWheel) + ABS(wRightWheel))) +
+                              (manager.k2 * (powf(restrictedLeftTotalTorque, 2) + powf(restrictedRightTotalTorque, 2))) + manager.k3 +
+                              (wLeftWheel * restrictedLeftTotalTorque) + (wRightWheel * restrictedRightTotalTorque); //受限功率
+}
+
+void powerControllTask(void *pvParameters)// 功率控制任务
+{
+    TickType_t xLastWakeTime;
+    xLastWakeTime = xTaskGetTickCount();
+
+    while (true)
+    {
+        /* update the current power status */  // 更新当前功率状态
+        manager.chassisPower    = capStatus.capacitorRx.chassisPower; 
+        manager.powerBuff       = capStatus.capacitorRx.capEnergy;
+        manager.refereeMaxPower = refereeDataCopy.chassis_power_limit;
+
+        // cap power loop    //超级电容能量环
+        if (capStatus.isConnected)  //如果超级电容连接正常
+        {
+            if (manager.mode == Manager::MODE::BATTERY)//在没开超电的情况下设置电容剩余期望能量为总能量的0.8
+            {
+                manager.buffSet = float(255 * 0.8f);
+            }
+            else
+            {
+                manager.buffSet = float(255 * 0.4f);//在开超电的情况下设置电容剩余期望能量为总能量的0.4
+            }
+  
+            manager.configuredMaxPower = manager.refereeMaxPower - powerPD(sqrtf(manager.buffSet), sqrtf(manager.powerBuff));
+            manager.configuredMaxPower = fmax(manager.configuredMaxPower, 23.0f);
+        }
+        else  //如果超级电容连接异常
+            manager.configuredMaxPower = manager.refereeMaxPower;   //最大功率 等于 裁判系统限制的最大功率
+
+        // manager.configuredMaxPower = 60.0f;
+
+        vTaskDelayUntil(&xLastWakeTime, xTimeInterval);
+    }
+}
+
+StackType_t powerControllTaskStack[128];
+StaticTask_t powerControllTaskTCB;
+void init() { xTaskCreateStatic(powerControllTask, "PowerControll", 128, nullptr, 10, powerControllTaskStack, &powerControllTaskTCB); }
+
+}  // namespace AnalyticalPowerManager
+}  // namespace Chassis
