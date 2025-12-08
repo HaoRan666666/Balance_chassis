@@ -25,7 +25,9 @@
 #include "arm_math.h"
 #include "LQR.h"
 #include "user_lib.h"
-
+#include "remote_control.h"
+#include "Motion_Controller.h"
+#include "Leg_Controller.h"
 /* 根据robot_def.h中的macro自动计算的参数 */
 #define HALF_WHEEL_BASE (WHEEL_BASE / 2.0f)     // 半轴距
 #define HALF_TRACK_WIDTH (TRACK_WIDTH / 2.0f)   // 半轮距
@@ -61,16 +63,17 @@ static float chassis_vx, chassis_vy;     // 将云台系的速度投影到底盘
 // static float vt_lf, vt_rf, vt_lb, vt_rb; // 底盘速度解算后的临时输出,待进行限幅
 
 //轮腿控制变量
-float Target_dx; 
-float Target_x;
-float Target_yaw;
-float Target_roll;
-float Target_L0;
-float w_Limit=2.5f;
-float YawTrack_Target;
+float Targetdw; //  目标角速度
 float Tl=0,Tpl=0  ,T1l=0,T2l=0,   Tr=0,Tpr=0,  T1r=0,T2r=0,   Fl=0,Fr=0;
 float Yaw_WheelDelta_T=0;//转向控制所需要叠加在轮子上的力矩差  注意用算出来的总力矩差除以2分配到两个轮子上
+float TargetX,TargetdX,Target_Yaw,TargetL0,TargetRoll,w_Limit=1.5f,YawTrack_Target;
+uint8_t Chassis_Balance_Flag=0;
+uint8_t Chassis_FirstFlag2=1;
+uint8_t Chassis_Model=0;
+uint8_t Chassis_YawFlag=0;
+uint8_t Chassis_XTL_Flag=0; // 小陀螺模式标志位
 
+#define SingleChassis		0//注释后Yaw跟云台同步
 
 void ChassisInit()
 {
@@ -298,10 +301,10 @@ void ChassisTask()
     // // 当前只做了17mm热量的数据获取,后续根据robot_def中的宏切换双枪管和英雄42mm的情况
 
     //获得弹速限制和剩余热量，发送到云台
-    chassis_feedback_data.bullet_speed = referee_data->GameRobotState.shooter_id1_17mm_speed_limit;//弹速限制
-    chassis_feedback_data.rest_heat = referee_data->PowerHeatData.shooter_heat0;//剩余热量
-    chassis_feedback_data.cooling_rate=referee_data->GameRobotState.shooter_id1_17mm_cooling_rate;//枪口冷却速率
-    chassis_feedback_data.cooling_limit=referee_data->GameRobotState.shooter_id1_17mm_cooling_limit;//枪口热量上限
+    // chassis_feedback_data.bullet_speed = referee_data->GameRobotState.shooter_id1_17mm_speed_limit;//弹速限制
+    chassis_feedback_data.rest_heat = referee_data->PowerHeatData.shooter_17mm_1_barrel_heat;//剩余热量
+    chassis_feedback_data.cooling_rate=referee_data->GameRobotState.shooter_barrel_cooling_value;//枪口冷却速率
+    chassis_feedback_data.cooling_limit=referee_data->GameRobotState.shooter_barrel_heat_limit;//枪口热量上限
     // 推送反馈消息
 #ifdef ONE_BOARD
     PubPushMessage(chassis_pub, (void *)&chassis_feedback_data);
@@ -310,6 +313,295 @@ void ChassisTask()
     CANCommSend(chasiss_can_comm, (void *)&chassis_feedback_data);
 #endif // CHASSIS_BOARD
 }
+
+
+void Balance_Control_Init(void)
+{
+	Leg_Controller_LegControlInit();  //pid参数
+	Motion_Controller_Init(); 
+}
+
+/*
+ *函数简介:轮子力矩控制
+ *参数说明:左轮力矩，右轮力矩
+ *返回类型:无
+ *备注:无
+ */
+void Chassis_Wheel_Control(float T_l ,float T_r)
+{
+    //转矩常数*电流*减速比=转矩
+    //电流=转矩/(转矩常数*减速比)
+    float Tau_l = T_l / CURRENT_TO_TORQUE / GEAR_RATIO ;  //目标力矩转化为目标电流
+    float Tau_r = T_r / CURRENT_TO_TORQUE / GEAR_RATIO ;
+
+    Tau_l= Tau_l / 20.0f * 16384; //映射到电机输入范围   
+    Tau_r= Tau_r / 20.0f * 16384; 
+
+    DJIMotorSetRef(motor_left,Tau_l);
+    DJIMotorSetRef(motor_right,Tau_r);
+}
+
+void Chassis_MotorControl_Leg_init(float T1_l,float T2_l,float T1_r,float T2_r)
+{
+	//  float Tl,Tr;
+	//  Warming_Brake(&Tl,&Tr);  //这里暂时不是很理解
+
+	//可以把关节电机的使能放在这里
+
+    //前腿T1 后腿T2
+     DMMotorSetRef(motor_lb,T1_l);
+     DMMotorSetRef(motor_lf,T2_l);
+     DMMotorSetRef(motor_rb,T1_r);
+     DMMotorSetRef(motor_rf,T2_r);
+}
+
+//收腿动作 
+void Chassis_MotorControl(float T_l,float T1_l,float T2_l,float T_r,float T1_r,float T2_r)
+{
+     Chassis_Wheel_Control(T_l ,T_r);
+     DMMotorSetRef(motor_lb,T1_l);
+     DMMotorSetRef(motor_lf,T2_l);
+     DMMotorSetRef(motor_rb,T1_r);
+     DMMotorSetRef(motor_rf,T2_r);
+}
+
+//根据不同状态选择不同的控制方式
+void Chassis_ModelControl(void)
+{
+	if(Chassis_Balance_Flag==0)  //如果还没有平衡
+		Chassis_StandFromGround();
+	else 
+	{
+		Chassis_ModelTwo();
+	}
+}
+
+
+void Chassis_Control(void)
+{
+    RC_ctrl_t* rcdata = Get_rc_data();
+    Balance_data* Balance_data=Get_Balance_Data();
+   if(Chassis_Balance_Flag==1)    //已经平衡
+	{
+/*====================变腿长====================*/
+		// if(switch_is_down(rcdata[TEMP].rc.switch_left) && Chassis_Model==3)   //摇杆控制
+		// {
+		// 	// if(rcdata.Remote_ThumbWheel>1024+50)TargetL0+=0.3f*Observer_BalanceStatus.dt;
+		// 	// else if(rcdata.Remote_ThumbWheel<1024-50)TargetL0-=0.3f*Observer_BalanceStatus.dt;    
+		// }
+/*====================Roll控制====================*/
+	TargetRoll=0;    //暂时不考虑这个功能
+/*====================平移&旋转====================*/
+	TargetdX=rcdata->rc.rocker_l1/660.0f/2 ;  //左竖 控制速度(m/s)		
+    TargetX+=TargetdX*Balance_data->dt;
+
+	Targetdw=rcdata->rc.rocker_r_ /660.0f/2; //右横 控制角速度 
+	w_Limit=1.5f;
+
+	Target_Yaw-=Targetdw*Balance_data->dt;
+    //TODO：增加小陀螺和跟随云台功能
+    
+    
+    }
+    /*====================控制====================*/
+	Chassis_ModelControl();  
+}
+
+
+
+void Chassis_StandFromGround(void)
+{
+    Balance_data* Balance_status=Get_Balance_Data();  
+    RC_ctrl_t* rc_data = Get_rc_data(); 
+    float Tl=0,T1l=0,T2l=0,Tr=0,T1r=0,T2r=0;
+
+  	static uint16_t Shoutui_Count=0;   //收腿计数
+	static uint16_t Balance_Count=0;   //平衡计数
+
+/*====================关节力矩====================*/
+    float L0_l=0.10f;
+    float L0_r=0.10f;  //让腿部长度收缩到最短  
+    //TODO:大轮腿最短长度待测
+
+    float phi1l,phi4l,phi1r,phi4r; 
+    //计算L0长度最短并且身体竖直时的腿部角度
+    Leg_Controller_InverseKinematicsSolution(L0_l,PI/2.0f,&phi1l,&phi4l);
+	Leg_Controller_InverseKinematicsSolution(L0_r,PI/2.0f,&phi1r,&phi4r);
+    //计算髋关节力矩
+	Leg_Controller_LengthLQR(Balance_status->Leg_L,phi1l,phi4l,&T1l,&T2l);
+	Leg_Controller_LengthLQR(Balance_status->Leg_R,phi1r,phi4r,&T1r,&T2r);
+    
+/*====================轮向力矩====================*/
+
+   float Motion_YAW_Control_Left_Dleta_T,Motion_YAW_Control_Right_Dleta_T;
+   if(Chassis_YawFlag==0)Motion_Controller_Yaw_Control(Target_Yaw,&Motion_YAW_Control_Left_Dleta_T,&Motion_YAW_Control_Right_Dleta_T,w_Limit);
+	else Motion_Controller_Yaw_Control_Follow(YawTrack_Target,&Motion_YAW_Control_Left_Dleta_T,&Motion_YAW_Control_Right_Dleta_T,w_Limit);
+
+   //T=LQR_T+偏航角控制T
+	Tl=Tl+Motion_YAW_Control_Left_Dleta_T;
+	Tr=Tr+Motion_YAW_Control_Right_Dleta_T;
+
+/*====================收腿检测====================*/  
+//调整腿部到初始位置的检测
+	#define Shoutui_AngleThreshold		0.18f
+	#define Shoutui_SpeedThreshold		0.04f
+	if(fabs(phi1l-Balance_status->Leg_L.phi_1)<Shoutui_AngleThreshold && fabs(phi4l-Balance_status->Leg_L.phi_4)<Shoutui_AngleThreshold \
+	   && fabs(phi1r-Balance_status->Leg_R.phi_1)<Shoutui_AngleThreshold && fabs(phi4r-Balance_status->Leg_R.phi_4)<Shoutui_AngleThreshold \
+	   && fabs(Balance_status->Leg_L.dphi_1)<Shoutui_SpeedThreshold && fabs(Balance_status->Leg_L.dphi_4)<Shoutui_SpeedThreshold \
+	   && fabs(Balance_status->Leg_R.dphi_1)<Shoutui_SpeedThreshold && fabs(Balance_status->Leg_R.dphi_4)<Shoutui_SpeedThreshold)
+		Shoutui_Count++;    //当前角度 与 L0等于0.1时的角度 相差小于阈值的时间超过200时 ，认为收腿完成
+	else
+		Shoutui_Count=0;
+	
+	if(Shoutui_Count>200)
+	{
+		Shoutui_Count=0;
+		Chassis_FirstFlag2=0;
+	}
+	
+	/*====================电机控制====================*/
+
+#define Stand_x		-0.0f
+
+if(Chassis_FirstFlag2==1) //腿部位置初始化阶段只有关节电机动
+	{
+        //先不加滤波在平地上调
+		// Observer_BalanceStatus.Body.MotionEstimation.x_nofilter=Stand_x;
+		// Observer_BalanceStatus.Body.MotionEstimation.x=Stand_x;
+		// Observer_BalanceStatus.Body.x_nofilter=Stand_x;
+		Balance_status->body_data.x=Stand_x;
+		
+		Chassis_MotorControl_Leg_init(T1l,T2l,T1r,T2r);
+	}
+    else  //收腿之后轮向电机发力
+		Chassis_MotorControl(Tl,T1l,T2l,Tr,T1r,T2r);
+
+	/*====================超时检测====================*/
+	static uint16_t TimeOUT_Count=0;
+	TimeOUT_Count++;
+	if(TimeOUT_Count>5000)
+	{
+		TimeOUT_Count=0;
+		// Chassis_Reset();
+	}
+	
+/*====================平衡检测====================*/
+
+#define Pingheng_PitchThreshold		(15.0f/180.0f*PI) 
+//判断平衡的俯仰角阈值 15度
+
+if(Balance_status->body_data.Pitch<Pingheng_PitchThreshold &&Balance_status->body_data.Pitch>-Pingheng_PitchThreshold)
+		Balance_Count++;
+	else
+		Balance_Count=0;
+	
+	if(Balance_Count>=500)//计数500认为达到平衡状态
+	{
+	    Balance_Count=0;
+		TimeOUT_Count=0;
+		Chassis_Balance_Flag=1; 
+        Chassis_Model=rc_data->rc.switch_right;//通过遥控器右拨开关选择平衡后的控制模式
+			if(Chassis_Model==2) TargetL0=0.15f;
+			else TargetL0=0.2f;
+
+            // Observer_BalanceStatus.Body.MotionEstimation.x_nofilter=Blance_X;
+			// Observer_BalanceStatus.Body.MotionEstimation.x=Blance_X;
+			// Observer_BalanceStatus.Body.x_nofilter=Blance_X;
+			Balance_status->body_data.x=0;
+    }
+
+}
+
+void Chassis_ModelTwo(void)
+{
+    Tl=Tpl=T1l=T2l=Tr=Tpr=T1r=T2r=Fl=Fr=0;
+    Balance_data* Balance_status=Get_Balance_Data();
+    RC_ctrl_t* rcdata =Get_rc_data();
+/*====================LQR建模====================*/
+	LQR_Clc(&Tl,&Tpl,&Tr,&Tpr,TargetX,0);  
+
+/*====================关节力矩====================*/
+//翻滚角补偿->L0 F  
+float Roll_Compensate_L0_Right=0,Roll_Compensate_L0_Left=0;
+float Roll_Conpensate_F_Right=0,Roll_Conpensate_F_Left=0;
+
+Motion_Controller_Roll_Control(TargetRoll,&Roll_Compensate_L0_Left,&Roll_Compensate_L0_Right,&Roll_Conpensate_F_Left,&Roll_Conpensate_F_Right);
+
+//腿长控制->F
+float Leg_Length_Control_Left_F=0,Leg_Length_Control_Right_F=0;
+               //左腿部分
+Left_Leg_Pid.Need_Value=TargetL0+Roll_Compensate_L0_Left;
+float_constrain(Left_Leg_Pid.Need_Value,0.1,0.3); //TODO:待测  腿长限幅 
+if(Balance_status->Leg_L.Fn<FN_Threshold) Left_Leg_Pid.Need_Value=0.22;//离地状态
+               //右腿部分
+Right_Leg_Pid.Need_Value=TargetL0+Roll_Compensate_L0_Right;
+float_constrain(Right_Leg_Pid.Need_Value,0.1,0.3); //腿长限幅
+if(Balance_status->Leg_R.Fn<FN_Threshold) Right_Leg_Pid.Need_Value=0.22;
+
+Leg_Controller_LegControl(&Leg_Length_Control_Left_F,&Leg_Length_Control_Right_F);
+
+//双腿协调->Tp
+float Leg_Coordinate_Left_Tp=0,Leg_Coordinate_Right_Tp=0;
+Motion_Controller_LegCoordination_Control(&Leg_Coordinate_Left_Tp,&Leg_Coordinate_Right_Tp);
+
+//F=Mg/cos(theta)+腿长控制F+翻滚角补偿F
+Fl= m_bodyleg * gravity / arm_cos_f32(PI/2-Balance_status->Leg_L.phi_0)+Roll_Conpensate_F_Left+Leg_Length_Control_Left_F;
+Fr= m_bodyleg * gravity / arm_cos_f32(PI/2-Balance_status->Leg_R.phi_0)+Roll_Conpensate_F_Right+Leg_Length_Control_Right_F; 
+
+if(Balance_status->Leg_L.Fn>=FN_Threshold) //触地状态 
+Tpl=Tpl+Leg_Coordinate_Left_Tp;
+else Fl=-10+Leg_Length_Control_Left_F;//减去一个常数防止悬空时腿部电机死锁 
+if(Balance_status->Leg_R.Fn>=FN_Threshold)
+Tpr=Tpr+Leg_Coordinate_Right_Tp;
+else Fr=-10+Leg_Length_Control_Right_F;
+
+Leg_Controller_VMC(Balance_status->Leg_L,Fl,Tpl,&T1l,&T2l);
+Leg_Controller_VMC(Balance_status->Leg_R,Fr,Tpr,&T1r,&T2r);
+
+	/*====================轮向力矩====================*/
+
+    //偏航角控制->T
+	float Locomotion_Controller_LeftWheelDeltaT1=0,Locomotion_Controller_RightWheelDeltaT1=0;
+	#ifndef SingleChassis  
+		if(Chassis_XTL_Flag==1) //开启小陀螺模式
+		{
+			if(Remote_RxData.Remote_Mouse_KeyR==1)
+				Motion_Controller_Yaw_Control(Target_Yaw,&Locomotion_Controller_LeftWheelDeltaT1,&Locomotion_Controller_RightWheelDeltaT1,w_Limit);
+			else
+			{
+				Motion_Controller_Yaw_Control_Follow(YawTrack_Target,&Locomotion_Controller_LeftWheelDeltaT1,&Locomotion_Controller_RightWheelDeltaT1,w_Limit);
+				Target_Yaw=Balance_status->body_data.Yaw;
+			}
+		}
+		else
+		{
+			Motion_Controller_Yaw_Control(Target_Yaw,&Locomotion_Controller_LeftWheelDeltaT1,&Locomotion_Controller_RightWheelDeltaT1,w_Limit);
+		}
+	#else
+		Motion_Controller_Yaw_Control(Target_Yaw,&Locomotion_Controller_LeftWheelDeltaT1,&Locomotion_Controller_RightWheelDeltaT1,w_Limit);
+	#endif
+    //T=LQR_T+偏航角控制T
+	if(Balance_status->Leg_L.Fn>=FN_Threshold)Tl=Tl+Locomotion_Controller_LeftWheelDeltaT1;
+	if(Balance_status->Leg_R.Fn>=FN_Threshold)Tr=Tr+Locomotion_Controller_RightWheelDeltaT1;
+
+    	/*====================电机控制====================*/
+	  Chassis_MotorControl(Tl,T1l,T2l,Tr,T1r,T2r);
+      /*====================模式切换====================*/
+	if(switch_is_down(rcdata[TEMP].rc.switch_left)) Chassis_Model=rcdata->rc.switch_right;
+}
+
+//复位代码  待完善
+void Chassis_Reset(void)
+{}
+//跳跃代码 待完善
+void Chassis_ModelJump(void)
+{}
+
+
+
+
+
+
 
 
 
@@ -336,8 +628,8 @@ static void ChassisPowerControl()
     float wRightWheel;          //右轮角速度
     float rightUelse;           //右轮用于控制theta和phi所需的力矩
 
-    Chassis_target_speed=Target_dx; 
-    Chassis_target_x=Target_x;
+    Chassis_target_speed=TargetdX; 
+    Chassis_target_x=TargetX;
     Chassis_current_speed= Balance_status->body_data.dx; 
     Uspeed=Get_Uspeed(Chassis_target_x,Chassis_target_speed);  //左右轮暂时用一个变量，待验证正负号关系
     Uyaw=Yaw_WheelDelta_T;

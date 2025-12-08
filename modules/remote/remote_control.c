@@ -16,6 +16,11 @@ static uint8_t rc_init_flag = 0; // 遥控器初始化标志位
 static USARTInstance *rc_usart_instance;
 static DaemonInstance *rc_daemon_instance;
 
+RC_ctrl_t* Get_rc_data(void)
+{
+    return rc_ctrl;
+}
+
 /**
  * @brief 矫正遥控器摇杆的值,超过660或者小于-660的值都认为是无效值,置0
  *

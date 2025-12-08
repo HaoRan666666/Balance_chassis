@@ -34,7 +34,7 @@ typedef struct
 	ext_power_heat_data_t PowerHeatData;				   // 0x0202
 	ext_game_robot_pos_t GameRobotPos;					   // 0x0203
 	ext_buff_musk_t BuffMusk;							   // 0x0204
-	aerial_robot_energy_t AerialRobotEnergy;			   // 0x0205
+	// aerial_robot_energy_t AerialRobotEnergy;			   // 0x0205
 	ext_robot_hurt_t RobotHurt;							   // 0x0206
 	ext_shoot_data_t ShootData;							   // 0x0207
 

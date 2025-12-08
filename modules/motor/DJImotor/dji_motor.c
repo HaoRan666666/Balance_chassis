@@ -53,7 +53,7 @@ static CANInstance sender_assignment[6] = {
 static uint8_t sender_enable_flag[9] = {0};
 
 
-DJIMotorInstance *Get_DJI_Instance()
+DJIMotorInstance* Get_DJI_Instance()
 {
     return &dji_motor_instance;
 }

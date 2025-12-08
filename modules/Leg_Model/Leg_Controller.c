@@ -61,43 +61,42 @@ void Leg_Controller_LegControl(float *LeftLeg_DeltaF,float *RightLeg_DeltaF)
    (*RightLeg_DeltaF)=PIDCalculate(&Right_Leg_Pid,balance_data->Leg_R.L0,Right_Leg_Pid.Need_Value);
 }
 
-
 /*
  *函数简介:腿长控制逆运动学解算
  *参数说明:摆杆长度L0
  *参数说明:摆杆角度phi0
- *参数说明:大腿与水平面夹角theta_1
- *参数说明:小腿连杆与水平面夹角theta_2
+ *参数说明:五连杆phi1
+ *参数说明:五连杆phi4
  *返回类型:无
  *备注:无
  */
-void Leg_Controller_InverseKinematicsSolution(float L_0,float phi_0,float *theta_1,float *small_rod_angle)
+void Leg_Controller_InverseKinematicsSolution(float L_0,float phi_0,float *phi_1,float *phi_4)
 {
-	float XC=L_0*cosf(phi_0);
+	float XC=l_5/2.0f+L_0*cosf(phi_0);
 	float YC=L_0*sinf(phi_0);
 	
-	float A=L1+XC;
-	float B=L1*L1-XC*XC;
-	float C=L2*L2-YC*YC;
-	float D=L2*L2+YC*YC;
+	float A=l_1+XC;
+	float B=l_1*l_1-XC*XC;
+	float C=l_2*l_2-YC*YC;
+	float D=l_2*l_2+YC*YC;
 	
-	float phi1=2.0f*atan2f(2.0f*L1*YC+sqrtf(2.0f*L1*L1*D+2.0f*XC*XC*C-B*B-C*C),A*A-C);
+	float phi1=2.0f*atan2f(2.0f*l_1*YC+sqrtf(2.0f*l_1*l_1*D+2.0f*XC*XC*C-B*B-C*C),A*A-C);
 	if(phi1>2.0f*PI)phi1-=2.0f*PI;
 	if(phi1<0)phi1+=2.0f*PI;
 	
-	A=L2+L1;
-	B=-XC;
-	C=L2-L1;
-	D=XC+L1;
+	A=l_3+l_4;
+	B=l_5-XC;
+	C=l_3-l_4;
+	D=XC+l_4-l_5;
 	
 	float E=(A*A-B*B-YC*YC);
 	float F=(B*B-C*C+YC*YC);
-	float phi4=2.0f*atan2f(2.0f*L1*YC-sqrtf(E*F),D*D+YC*YC-L2*L2);
+	float phi4=2.0f*atan2f(2.0f*l_4*YC-sqrtf(E*F),D*D+YC*YC-l_3*l_3);
 	if(phi4>PI)phi4-=2.0f*PI;
 	if(phi4<-PI)phi4+=2.0f*PI;
 
-	(*theta_1)=phi4;
-	(*small_rod_angle)=(PI-phi1);
+	(*phi_1)=phi1;
+	(*phi_4)=phi4;
 }
 
 
@@ -111,14 +110,12 @@ void Leg_Controller_InverseKinematicsSolution(float L_0,float phi_0,float *theta
  *返回类型:无
  *备注:无
  */
-//用于倒地自起
-void Leg_Controller_LengthLQR(Leg_data Leg,float target_theta_1,float target_small_rod_angle,float *T1,float *T2)
+void Leg_Controller_LengthLQR(Leg_data Leg,float target_phi1,float target_phi4,float *T1,float *T2)
 {
-	#define Leg_Controller_LQR_FeedForward	5.4f//3.8f
-	#define Leg_Controller_LQR_K1			31.6228f
-	#define Leg_Controller_LQR_K2			1.2142f//31.6228    1.2142
+	#define Leg_Controller_LQR_FeedForward	0
+	#define Leg_Controller_LQR_K1			0
+	#define Leg_Controller_LQR_K2			0
 	
-	(*T1)=-Leg_Controller_LQR_FeedForward-Leg_Controller_LQR_K1*(Leg.theta_1-target_theta_1)-Leg_Controller_LQR_K2*Leg.theta_1;
-	(*T2)=Leg_Controller_LQR_FeedForward-Leg_Controller_LQR_K1*(Leg.small_rod_angle-target_small_rod_angle)-Leg_Controller_LQR_K2*Leg.d_small_rod_angle;
-	//不知道能不能直接用小杆角度和角速度
+	(*T1)=-Leg_Controller_LQR_FeedForward-Leg_Controller_LQR_K1*(Leg.phi_1-target_phi1)-Leg_Controller_LQR_K2*Leg.dphi_1;
+	(*T2)=Leg_Controller_LQR_FeedForward-Leg_Controller_LQR_K1*(Leg.phi_4-target_phi4)-Leg_Controller_LQR_K2*Leg.dphi_4;
 }

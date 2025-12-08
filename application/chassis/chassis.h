@@ -36,4 +36,6 @@ typedef struct
 
 }Chassis_power_control_t;
 
+void Chassis_StandFromGround(void);
+void Chassis_ModelTwo(void);
 #endif // CHASSIS_H

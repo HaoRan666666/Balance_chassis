@@ -9,6 +9,11 @@
         "ins_task.h": "c",
         "dji_motor.h": "c",
         "observer.h": "c",
-        "balance.h": "c"
+        "balance.h": "c",
+        "cmath": "c",
+        "controller.h": "c",
+        "motion_controller.h": "c",
+        "remote_control.h": "c",
+        "lqr.h": "c"
     }
 }

@@ -130,4 +130,5 @@ RC_ctrl_t *RemoteControlInit(UART_HandleTypeDef *rc_usart_handle);
  */
 uint8_t RemoteControlIsOnline();
 
+RC_ctrl_t* Get_rc_data(void);
 #endif

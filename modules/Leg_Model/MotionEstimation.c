@@ -27,20 +27,20 @@
 //     4.状态更新：      Xhat(k)=Xhat_minus(k)+K(k)*(Z(k)-H*Xhat_minus(k))
 //     5.协方差更新：    P(k)=(I-K(k)*H)*P_minus(k)
 
-float MotionEstimation_H[4]={1.0f,                0,
-                             0,                  1.0f}; //观测矩阵H
+float MotionEstimation_H[4]={1.0f,      0,
+                             0,         1.0f}; //观测矩阵H
 
-float MotionEstimation_F[4]={1.0f,              0.002f,
-                              0,                 1.0f}; //状态转移矩阵F
+float MotionEstimation_F[4]={1.0f,      0.002f,
+                              0,        1.0f}; //状态转移矩阵F
                             
-float MotionEstimation_Q[4]={0.1f,              0,
-                              0,                  0.1f}; //过程噪声协方差矩阵Q
+float MotionEstimation_Q[4]={0.1f,      0,
+                              0,        0.1f}; //过程噪声协方差矩阵Q
                               
-float MotionEstimation_R[4]={100.0f,                0,
-                              0,                  1000000.0f}; //观测噪声协方差矩阵R
+float MotionEstimation_R[4]={100.0f,    0,
+                              0,        1000000.0f}; //观测噪声协方差矩阵R
 
-float MotionEstimation_P[4]={1.0f,                 0,
-                              0,                  1.0f}; //估计误差协方差矩阵P
+float MotionEstimation_P[4]={1.0f,      0,
+                              0,        1.0f}; //估计误差协方差矩阵P
 
 
 //卡尔曼滤波初始化
