@@ -13,8 +13,19 @@
 #define DM_P_MAX  12.5f
 #define DM_V_MIN  (-45.0f)
 #define DM_V_MAX  45.0f
-#define DM_T_MIN  (-18.0f)
-#define DM_T_MAX   18.0f
+#define DM_T_MIN  (-54.0f)
+#define DM_T_MAX   54.0f
+
+typedef enum
+{
+    DMMOTOR_MODE_MIT = 1,
+    DMMOTOR_MODE_POS_VEL,
+    DMMOTOR_MODE_VEL,
+    DMMOTOR_MODE_FORCE_POS          // 力位混控模式
+}DMMotor_WorkMode_e;
+
+/* 电机控制器,包括其他来源的反馈数据指针,3环控制器和电机的参考输入*/
+// 后续增加前馈数据指针
 
 typedef struct 
 {
@@ -29,26 +40,50 @@ typedef struct
     int32_t total_round;
 }DM_Motor_Measure_s;
 
+
 typedef struct
 {
-    uint16_t position_des;
-    uint16_t velocity_des;
-    uint16_t torque_des;
-    uint16_t Kp;
-    uint16_t Kd;
+    struct
+    {
+        uint16_t position_des;
+        uint16_t velocity_des;
+        uint16_t torque_des;
+        uint16_t Kp;
+        uint16_t Kd;
+    }MIT;
+    struct
+    {
+        float position_des;
+        float velocity_des;
+    }POS_VEL;
+    struct
+    {
+        float velocity_des;
+    }VEL;
+    struct
+    {
+        float position_des;
+        uint16_t velocity_des;
+        uint16_t torque_des;
+    }FORCE_POS;
 }DMMotor_Send_s;
+
 typedef struct 
 {
+    DMMotor_WorkMode_e work_mode;
     DM_Motor_Measure_s measure;
     Motor_Control_Setting_s motor_settings;
-    PIDInstance current_PID;
-    PIDInstance speed_PID;
-    PIDInstance angle_PID;
-    float *other_angle_feedback_ptr;
-    float *other_speed_feedback_ptr;
-    float *speed_feedforward_ptr;
-    float *current_feedforward_ptr;
-    float pid_ref;
+    DMMotor_Send_s dm_send;
+    // PIDInstance current_PID;
+    // PIDInstance speed_PID;
+    // PIDInstance angle_PID;
+    // float *other_angle_feedback_ptr;
+    // float *other_speed_feedback_ptr;
+    // float *speed_feedforward_ptr;
+    // float *current_feedforward_ptr;
+    // float pid_ref;
+    Motor_Controller_s motor_controller;
+    
     Motor_Working_Type_e stop_flag;
     CANInstance *motor_can_instace;
     DaemonInstance* motor_daemon;
@@ -63,7 +98,6 @@ typedef enum
     DM_CMD_CLEAR_ERROR = 0xfb // 清除电机过热错误
 }DMMotor_Mode_e;
 
-DMMotorInstance *DMMotorInit(Motor_Init_Config_s *config);
 
 void DMMotorSetRef(DMMotorInstance *motor, float ref);
 
@@ -74,6 +108,10 @@ void DMMotorEnable(DMMotorInstance *motor);
 void DMMotorStop(DMMotorInstance *motor);
 void DMMotorCaliEncoder(DMMotorInstance *motor);
 void DMMotorControlInit();
+void DMMotorTask(void const *argument);
+DMMotorInstance *DMMotorInit(Motor_Init_Config_s *config ,DMMotor_WorkMode_e mode);
+void DMMotorSetPosVel(DMMotorInstance *motor, float pos,float vel);
+void DMMotorSetVel(DMMotorInstance *motor, float vel);
 
 DMMotorInstance * Get_DM_Instance();
 #endif // !DMMOTOR

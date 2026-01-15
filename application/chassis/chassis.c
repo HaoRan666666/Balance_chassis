@@ -48,7 +48,10 @@ static Chassis_Ctrl_Cmd_s chassis_cmd_recv;         // 底盘接收到的控制�
 static Chassis_Upload_Data_s chassis_feedback_data; // 底盘回传的反馈数据
 
 static referee_info_t* referee_data; // 用于获取裁判系统的数据
-static Referee_Interactive_info_t ui_data; // UI数据，将底盘中的数据传入此结构体的对应变量中，UI会自动检测是否变化，对应显示UI
+ Referee_Interactive_info_t ui_data; // UI数据，将底盘中的数据传入此结构体的对应变量中，UI会自动检测是否变化，对应显示UI
+
+   static Vision_Recv_s *vision_recv_data; //解决了HardFault
+
 
 static SuperCapInstance *cap;                                       // 超级电容
 static DMMotorInstance *motor_lf, *motor_rf, *motor_lb, *motor_rb; //四个髋关节电机的实例
@@ -57,9 +60,9 @@ static DJIMotorInstance *motor_left ,*motor_right;  //左右足端轮电机实�
 static Chassis_power_control_t power_control; // 底盘功率控制实例
 /* 用于自旋变速策略的时间变量 */
 // static float t;
-
+static RC_ctrl_t *rc_data;              // 遥控器数据,初始化时返回
 /* 私有函数计算的中介变量,设为静态避免参数传递的开销 */
-static float chassis_vx, chassis_vy;     // 将云台系的速度投影到底盘
+// static float chassis_vx, chassis_vy;     // 将云台系的速度投影到底盘
 // static float vt_lf, vt_rf, vt_lb, vt_rb; // 底盘速度解算后的临时输出,待进行限幅
 
 //轮腿控制变量
@@ -75,34 +78,52 @@ uint8_t Chassis_XTL_Flag=0; // 小陀螺模式标志位
 
 #define SingleChassis		0//注释后Yaw跟云台同步
 
+float test_motor_t_rf=-0.758;
+float test_motor_t_lf=0.756;
+float test_motor_t_rb=2.53;
+float test_motor_t_lb=-2.57;
+
+float test_speed_left=0;
+float test_speed_right=0;
+
 void ChassisInit()
 {
+    rc_data = RemoteControlInit(&huart5); //双板的时候删除
+    vision_recv_data = VisionInit(&huart9); // 视觉通信串口
     //髋关节电机初始化
     Motor_Init_Config_s chassis_DM_motor_config = {  
         .can_init_config.can_handle = &hcan1,
         .controller_param_init_config = { 
+            .angle_PID = {
+                .Kp = 8,
+                .Ki = 0,
+                .Kd = 0,
+                .IntegralLimit = 1,
+                .Improve = PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement,
+                .MaxOut = 3,
+            },
             .speed_PID = {
-                .Kp = 10, // 4.5
+                .Kp = 4, // 4.5
                 .Ki = 0,  // 0
                 .Kd = 0,  // 0
-                .IntegralLimit = 3000,
+                .IntegralLimit = 1,
                 .Improve = PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement,
-                .MaxOut = 12000,
+                .MaxOut = 20,
             },
             .current_PID = {
-                .Kp = 0.5, // 0.4
+                .Kp = 0, // 0.4
                 .Ki = 0,   // 0
                 .Kd = 0,
-                .IntegralLimit = 3000,
+                .IntegralLimit = 0,
                 .Improve = PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement,
-                .MaxOut = 15000,
+                .MaxOut = 0,
             },
         },
         .controller_setting_init_config = {
             .angle_feedback_source = MOTOR_FEED,
             .speed_feedback_source = MOTOR_FEED,
-            .outer_loop_type = SPEED_LOOP,
-            .close_loop_type = SPEED_LOOP | CURRENT_LOOP,
+            .outer_loop_type = ANGLE_LOOP,
+            .close_loop_type = SPEED_LOOP | ANGLE_LOOP,
         },
         .motor_type = DM8009,
     };
@@ -111,7 +132,7 @@ void ChassisInit()
         .can_init_config.can_handle = &hcan2,
         .controller_param_init_config = {
             .speed_PID = {
-                .Kp = 10, // 4.5
+                .Kp = 2, // 4.5
                 .Ki = 0,  // 0
                 .Kd = 0,  // 0
                 .IntegralLimit = 3000,
@@ -119,7 +140,7 @@ void ChassisInit()
                 .MaxOut = 12000,
             },
             .current_PID = {
-                .Kp = 0.5, // 0.4
+                .Kp = 0, // 0.4
                 .Ki = 0,   // 0
                 .Kd = 0,
                 .IntegralLimit = 3000,
@@ -137,34 +158,38 @@ void ChassisInit()
     };
     //  @todo: 当前还没有设置电机的正反转,仍然需要手动添加reference的正负号,需要电机module的支持,待修改.
 
-    //1号和3号是左侧髋关节电机
-    //2号和4号是右侧髋关节电机
-    chassis_DM_motor_config.can_init_config.tx_id = 1;
+    // 1号和3号是左侧髋关节电机
+    // 2号和4号是右侧髋关节电机
+    chassis_DM_motor_config.can_init_config.tx_id = 0x01;
+    chassis_DM_motor_config.can_init_config.rx_id = 0x11;
     chassis_DM_motor_config.controller_setting_init_config.motor_reverse_flag = MOTOR_DIRECTION_REVERSE;
-    motor_lf = DMMotorInit(&chassis_DM_motor_config);
+    motor_lf = DMMotorInit(&chassis_DM_motor_config,DMMOTOR_MODE_MIT);
 
-    chassis_DM_motor_config.can_init_config.tx_id = 2;
+    chassis_DM_motor_config.can_init_config.tx_id = 0x02;
+    chassis_DM_motor_config.can_init_config.rx_id = 0x12;
     chassis_DM_motor_config.controller_setting_init_config.motor_reverse_flag = MOTOR_DIRECTION_REVERSE;
-    motor_rf = DMMotorInit(&chassis_DM_motor_config);
+    motor_rf = DMMotorInit(&chassis_DM_motor_config,DMMOTOR_MODE_MIT);
 
-    chassis_DM_motor_config.can_init_config.tx_id = 3;
+    chassis_DM_motor_config.can_init_config.tx_id = 0x03;
+    chassis_DM_motor_config.can_init_config.rx_id = 0x13;
     chassis_DM_motor_config.controller_setting_init_config.motor_reverse_flag = MOTOR_DIRECTION_REVERSE;
-    motor_lb = DMMotorInit(&chassis_DM_motor_config);
+    motor_lb = DMMotorInit(&chassis_DM_motor_config,DMMOTOR_MODE_MIT);
 
-    chassis_DM_motor_config.can_init_config.tx_id = 4;
+    chassis_DM_motor_config.can_init_config.tx_id = 0x04;
+    chassis_DM_motor_config.can_init_config.rx_id = 0x14;
     chassis_DM_motor_config.controller_setting_init_config.motor_reverse_flag = MOTOR_DIRECTION_REVERSE;
-    motor_rb = DMMotorInit(&chassis_DM_motor_config);
+    motor_rb = DMMotorInit(&chassis_DM_motor_config,DMMOTOR_MODE_MIT);
 
 
     chassis_DJI_motor_config.can_init_config.tx_id = 1;
-    chassis_DJI_motor_config.controller_setting_init_config.motor_reverse_flag = MOTOR_DIRECTION_REVERSE;
+    chassis_DJI_motor_config.controller_setting_init_config.motor_reverse_flag = MOTOR_DIRECTION_NORMAL;
     motor_left = DJIMotorInit(&chassis_DJI_motor_config);
 
     chassis_DJI_motor_config.can_init_config.tx_id = 2;
     chassis_DJI_motor_config.controller_setting_init_config.motor_reverse_flag = MOTOR_DIRECTION_REVERSE;
     motor_right = DJIMotorInit(&chassis_DJI_motor_config);
 
-    referee_data = UITaskInit(&huart1,&ui_data); // 裁判系统初始化,会同时初始化UI
+    referee_data = UITaskInit(&huart1,&ui_data); // 裁判系统初始化,会同时初始化UI   //删掉会导致Hardfault
 
     SuperCap_Init_Config_s cap_conf = {
         .can_config = {
@@ -180,9 +205,9 @@ void ChassisInit()
 
     CANComm_Init_Config_s comm_conf = {
         .can_config = {
-            .can_handle = &hcan3,
-            .tx_id = 0x311,
-            .rx_id = 0x312,
+            .can_handle = &hcan2,
+            .tx_id = 0x52,
+            .rx_id = 0x51,
         },
         .recv_data_len = sizeof(Chassis_Ctrl_Cmd_s),
         .send_data_len = sizeof(Chassis_Upload_Data_s),
@@ -233,7 +258,8 @@ static void EstimateSpeed()
 
 /* 机器人底盘控制核心任务 */
 void ChassisTask()
-{
+{ 
+    RC_ctrl_t* rc_data=Get_rc_data();
     // 后续增加没收到消息的处理(双板的情况)
     // 获取新的控制信息
 #ifdef ONE_BOARD
@@ -242,7 +268,7 @@ void ChassisTask()
 #ifdef CHASSIS_BOARD
     chassis_cmd_recv = *(Chassis_Ctrl_Cmd_s *)CANCommGet(chasiss_can_comm);
 #endif // CHASSIS_BOARD
-
+chassis_cmd_recv.chassis_mode = CHASSIS_NO_FOLLOW;
     if (chassis_cmd_recv.chassis_mode == CHASSIS_ZERO_FORCE)
     { // 如果出现重要模块离线或遥控器设置为急停,让电机停止
         DMMotorStop(motor_lf);
@@ -262,7 +288,7 @@ void ChassisTask()
         DJIMotorEnable(motor_right);
     }
 
-    // 根据控制模式设定旋转速度
+    // 根据控制模式设定旋转速度hcan1
     switch (chassis_cmd_recv.chassis_mode)
     {
     case CHASSIS_NO_FOLLOW: // 底盘不旋转,但维持全向机动,一般用于调整云台姿态
@@ -278,22 +304,30 @@ void ChassisTask()
         break;
     }
 
-    // 根据云台和底盘的角度offset将控制量映射到底盘坐标系上
-    // 底盘逆时针旋转为角度正方向;云台命令的方向以云台指向的方向为x,采用右手系(x指向正北时y在正东)
-    static float sin_theta, cos_theta;
-    cos_theta = arm_cos_f32(chassis_cmd_recv.offset_angle * DEGREE_2_RAD);
-    sin_theta = arm_sin_f32(chassis_cmd_recv.offset_angle * DEGREE_2_RAD);
-    chassis_vx = chassis_cmd_recv.vx * cos_theta - chassis_cmd_recv.vy * sin_theta;
-    chassis_vy = chassis_cmd_recv.vx * sin_theta + chassis_cmd_recv.vy * cos_theta;
+    //速度环控制  轮半径60mm  向前的速度转化为度/秒  电机转速=线速度/轮子半径
+    // DJIMotorSetRef(motor_left,chassis_cmd_recv.vx/Wheel_R + chassis_cmd_recv.wz * Body_Rl);// m/s 正负号待定
+    // DJIMotorSetRef(motor_right,chassis_cmd_recv.vx/Wheel_R - chassis_cmd_recv.wz * Body_Rl);
 
-    //根据控制模式进行正运动学解算,计算底盘输出
+    test_speed_left=rc_data->rc.rocker_l1*30+rc_data->rc.rocker_r_*10;
+    test_speed_right=rc_data->rc.rocker_l1*30-rc_data->rc.rocker_r_*10;
+    DJIMotorSetRef(motor_left,-test_speed_left);// m/s 正负号待定
+    DJIMotorSetRef(motor_right,-test_speed_right);// m/s 正负号待定
+    // 根据控制模式进行正运动学解算,计算底盘输出
     //TODO：后续添加LQR计算
+    // test_motor_t_lf=rc_data->rc.rocker_l1/660.0f*10;
+    // test_motor_t_rf=rc_data->rc.rocker_r1/660.0f*10;
+
+    // DMMotorSetRef(motor_rf,test_motor_t_rf);
+    DMMotorSetRef(motor_rf,test_motor_t_rf);
+    DMMotorSetRef(motor_rb,test_motor_t_rb);
+    DMMotorSetRef(motor_lf,test_motor_t_lf);
+    DMMotorSetRef(motor_lb,test_motor_t_lb);
 
     // 根据裁判系统的反馈数据和电容数据对输出限幅并设定闭环参考值
-    LimitChassisOutput();
+    // LimitChassisOutput();
 
     // 根据电机的反馈速度和IMU(如果有)计算真实速度
-    EstimateSpeed();
+    // EstimateSpeed();
 
     // // 获取裁判系统数据   建议将裁判系统与底盘分离，所以此处数据应使用消息中心发送
     // // 我方颜色id小于7是红色,大于7是蓝色,注意这里发送的是对方的颜色, 0:blue , 1:red
@@ -320,6 +354,27 @@ void Balance_Control_Init(void)
 	Leg_Controller_LegControlInit();  //pid参数
 	Motion_Controller_Init(); 
 }
+
+// void Body_speed_control(float speed)  //m/s
+// {
+//    float wheel_speed_l = speed ;
+//    float wheel_speed_l = speed ;
+
+//    Chassis_Wheel_speed_Control(speed_l,speed_r);
+
+// }
+
+// void Chassis_Wheel_speed_Control(float speed_l ,float speed_r)
+// {
+//     //转矩常数*电流*减速比=转矩
+//     //电流=转矩/(转矩常数*减速比)
+    
+//     //车体速度等于轮子线速度，转子线速度除以减速比
+
+
+//     DJIMotorSetRef(motor_left ,speed_l);
+//     DJIMotorSetRef(motor_right,speed_r);
+// }
 
 /*
  *函数简介:轮子力矩控制

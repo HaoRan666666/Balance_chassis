@@ -95,6 +95,8 @@ typedef struct
     PIDInstance angle_PID;
 
     float pid_ref; // 将会作为每个环的输入和输出顺次通过串级闭环
+    float target_position;
+    float target_velocity;
 } Motor_Controller_s;
 
 /* 电机类型枚举 */

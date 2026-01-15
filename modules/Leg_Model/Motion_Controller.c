@@ -61,13 +61,13 @@ void Motion_Controller_Yaw_Control(float target_Yaw,float *LeftWheel_DeltaT,floa
  */
 void Motion_Controller_Yaw_Control_Follow(float target_Yaw,float *LeftWheel_DeltaT,float *RightWheel_DeltaT, float w_Limit)
 { 
-     Body_data* body_status=Get_Balance_Data();
+     Balance_data* balance_status=Get_Balance_Data();
     //角度环
-    float phi_dot = YAW_Controll_LQR_Angel_K* (body_status->Yaw-target_Yaw);  //机身角速度
+    float phi_dot = YAW_Controll_LQR_Angel_K* (balance_status->body_data.Yaw-target_Yaw);  //机身角速度
     //float w=YAW_Controll_LQR_Angel_K*(-(GM6020_MotorStatus[0].Angle-Yaw_GM6020PositionValue)/8192.0f*2.0f*PI-target_Yaw);
     phi_dot=float_constrain(phi_dot,-w_Limit,w_Limit);//限幅
     //速度环
-    float T=YAW_Controll_LQR_Speed_K *(body_status->d_Yaw+phi_dot);//这里的加号是因为d_Yaw的正方向和期望的角速度正方向相反
+    float T=YAW_Controll_LQR_Speed_K *(balance_status->body_data.d_Yaw+phi_dot);//这里的加号是因为d_Yaw的正方向和期望的角速度正方向相反
 
     (*LeftWheel_DeltaT)=-T/2.0f;     //正负有待验证
     (*RightWheel_DeltaT)=T/2.0f;
@@ -92,8 +92,8 @@ void Motion_Controller_Roll_Control(float Roll_Target,float *LeftLeg_DeltaL0,flo
    // 长度控制
    float delta_L0= Balance->Leg_L.L0-Balance->Leg_R.L0;   //计算两条腿当前长度差
 
-   	float A=delta_L0*arm_cos_f32(Balance->body_data.Roll-Roll_Target)+2.0f*Rl*arm_sin_f32(Balance->body_data.Roll-Roll_Target);
-	float B=-delta_L0*arm_sin_f32(Balance->body_data.Roll-Roll_Target)+2.0f*Rl*arm_cos_f32(Balance->body_data.Roll-Roll_Target);
+   	float A=delta_L0*arm_cos_f32(Balance->body_data.Roll-Roll_Target)+2.0f*Body_Rl*arm_sin_f32(Balance->body_data.Roll-Roll_Target);
+	float B=-delta_L0*arm_sin_f32(Balance->body_data.Roll-Roll_Target)+2.0f*Body_Rl*arm_cos_f32(Balance->body_data.Roll-Roll_Target);
     float d_l0_r,d_l0_l,tan_delta;
     if(B==0) 
     {
@@ -104,8 +104,8 @@ void Motion_Controller_Roll_Control(float Roll_Target,float *LeftLeg_DeltaL0,flo
     {
     tan_delta=A/B;
 
-    d_l0_r=Rl*tan_delta;
-    d_l0_l=-Rl*tan_delta;
+    d_l0_r=Body_Rl*tan_delta;
+    d_l0_l=-Body_Rl*tan_delta;
     }
    
    (*LeftLeg_DeltaL0)=d_l0_l;

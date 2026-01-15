@@ -21,7 +21,7 @@
 #include "master_process.h"
 #include "arm_math.h"
 
-INS_t INS;
+static INS_t INS;
 static IMU_Param_t IMU_Param;
 static PIDInstance TempCtrl = {0};
 

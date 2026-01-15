@@ -14,7 +14,7 @@
 #include "daemon.h"
 #include "HT04.h"
 #include "buzzer.h"
-
+#include "dmmotor.h"
 #include "bsp_log.h"
 
 osThreadId insTaskHandle;
@@ -51,7 +51,7 @@ void OSTaskInit()
     osThreadDef(uitask, StartUITASK, osPriorityNormal, 0, 512);
     uiTaskHandle = osThreadCreate(osThread(uitask), NULL);
 
-    HTMotorControlInit(); // 没有注册HT电机则不会执行
+     DMMotorControlInit(); 
 }
 
 __attribute__((noreturn)) void StartINSTASK(void const *argument)
@@ -121,7 +121,7 @@ __attribute__((noreturn)) void StartROBOTTASK(void const *argument)
         robot_dt = DWT_GetTimeline_ms() - robot_start;
         if (robot_dt > 5)
             LOGERROR("[freeRTOS] ROBOT core Task is being DELAY! dt = [%f]", &robot_dt);
-        osDelay(5);
+        osDelay(1);
     }
 }
 

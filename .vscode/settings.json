@@ -14,6 +14,9 @@
         "controller.h": "c",
         "motion_controller.h": "c",
         "remote_control.h": "c",
-        "lqr.h": "c"
+        "lqr.h": "c",
+        "stdint.h": "c",
+        "general_def.h": "c",
+        "robot_cmd.h": "c"
     }
 }

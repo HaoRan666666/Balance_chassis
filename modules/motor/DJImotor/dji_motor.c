@@ -5,7 +5,7 @@
 
 static uint8_t idx = 0; // register idx,是该文件的全局电机索引,在注册时使用
 /* DJI电机的实例,此处仅保存指针,内存的分配将通过电机实例初始化时通过malloc()进行 */
-DJIMotorInstance *dji_motor_instance[DJI_MOTOR_CNT] = {NULL}; // 会在control任务中遍历该指针数组进行pid计算
+static DJIMotorInstance *dji_motor_instance[DJI_MOTOR_CNT] = {NULL}; // 会在control任务中遍历该指针数组进行pid计算
 
 
 #ifdef FDCAN
@@ -53,9 +53,9 @@ static CANInstance sender_assignment[6] = {
 static uint8_t sender_enable_flag[9] = {0};
 
 
-DJIMotorInstance* Get_DJI_Instance()
+DJIMotorInstance** Get_DJI_Instance()
 {
-    return &dji_motor_instance;
+    return dji_motor_instance;
 }
 /**
  * @brief 根据电调/拨码开关上的ID,根据说明书的默认id分配方式计算发送ID和接收ID,
@@ -320,10 +320,10 @@ void DJIMotorControl()
         // 计算电流环,目前只要启用了电流环就计算,不管外层闭环是什么,并且电流只有电机自身传感器的反馈
         if (motor_setting->feedforward_flag & CURRENT_FEEDFORWARD)
             pid_ref += *motor_controller->current_feedforward_ptr;
-        if (motor_setting->close_loop_type & CURRENT_LOOP)
-        {
-            pid_ref = PIDCalculate(&motor_controller->current_PID, measure->real_current, pid_ref);
-        }
+        // if (motor_setting->close_loop_type & CURRENT_LOOP)
+        // {
+        //     pid_ref = PIDCalculate(&motor_controller->current_PID, measure->real_current, pid_ref);
+        // }
 
         if (motor_setting->feedback_reverse_flag == FEEDBACK_DIRECTION_REVERSE)
             pid_ref *= -1;

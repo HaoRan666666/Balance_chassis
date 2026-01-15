@@ -5,7 +5,7 @@
 #include "MotionEstimation.h"
 #define DEG_TO_RAD PI/180.0f
 //物理参数
-#define Wheel_R  0.03     //轮半径
+#define Wheel_R  0.06     //轮半径
 #define L1 0.105   //大腿长度
 #define L2 0.125   //小腿长度
 #define gravity  9.80665f
@@ -13,7 +13,7 @@
 #define m_w	  0.056   //轮子重量
 #define m_bodyleg   2.139      //除去轮子后机体的重量(kg)  
 
-#define Rl	  0.162//0.324f/2.0f //机身宽度
+#define Body_Rl	  0.162//0.324f/2.0f //机身宽度的一半
 
 #define l_1													0.105f 
 #define l_2													0.125f
