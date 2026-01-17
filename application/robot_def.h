@@ -135,7 +135,7 @@ typedef struct
  *
  */
 // cmd发布的底盘控制数据,由chassis订阅
-#pragma pack(1)
+
 typedef struct
 {
     // 控制部分
@@ -148,7 +148,14 @@ typedef struct
     //  ...
 
 } Chassis_Ctrl_Cmd_s;
-#pragma pack()
+
+typedef struct
+{
+    // 控制部分
+    float vx;           // 前进方向速度
+
+} Chassis_Ctrl_Cmd_s_test;
+
 // cmd发布的云台控制数据,由gimbal订阅
 typedef struct
 { // 云台角度控制
@@ -176,7 +183,7 @@ typedef struct
  * @brief 由cmd订阅,其他应用也可以根据需要获取.
  *
  */
-#pragma pack(1)
+
 typedef struct
 {
 #if defined(CHASSIS_BOARD) || defined(GIMBAL_BOARD) // 非单板的时候底盘还将imu数据回传(若有必要)
@@ -194,7 +201,7 @@ typedef struct
     uint16_t cooling_rate;        //冷却速率
     uint16_t cooling_limit;       //热量上限
 } Chassis_Upload_Data_s;
-#pragma pack()
+
 typedef struct
 {
     attitude_t gimbal_imu_data;

@@ -88,7 +88,7 @@ float test_speed_right=0;
 
 void ChassisInit()
 {
-    rc_data = RemoteControlInit(&huart5); //双板的时候删除
+    // rc_data = RemoteControlInit(&huart5); //双板的时候删除
     vision_recv_data = VisionInit(&huart9); // 视觉通信串口
     //髋关节电机初始化
     Motor_Init_Config_s chassis_DM_motor_config = {  
@@ -129,7 +129,7 @@ void ChassisInit()
     };
     //轮电机初始化
     Motor_Init_Config_s chassis_DJI_motor_config = {  
-        .can_init_config.can_handle = &hcan2,
+        .can_init_config.can_handle = &hcan3,
         .controller_param_init_config = {
             .speed_PID = {
                 .Kp = 2, // 4.5
@@ -211,6 +211,7 @@ void ChassisInit()
         },
         .recv_data_len = sizeof(Chassis_Ctrl_Cmd_s),
         .send_data_len = sizeof(Chassis_Upload_Data_s),
+        
     };
     chasiss_can_comm = CANCommInit(&comm_conf); // can comm初始化
 #endif                                          // CHASSIS_BOARD
@@ -268,7 +269,7 @@ void ChassisTask()
 #ifdef CHASSIS_BOARD
     chassis_cmd_recv = *(Chassis_Ctrl_Cmd_s *)CANCommGet(chasiss_can_comm);
 #endif // CHASSIS_BOARD
-chassis_cmd_recv.chassis_mode = CHASSIS_NO_FOLLOW;
+    //   chassis_cmd_recv.chassis_mode = CHASSIS_NO_FOLLOW;
     if (chassis_cmd_recv.chassis_mode == CHASSIS_ZERO_FORCE)
     { // 如果出现重要模块离线或遥控器设置为急停,让电机停止
         DMMotorStop(motor_lf);

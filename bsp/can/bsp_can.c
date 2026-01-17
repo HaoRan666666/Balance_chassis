@@ -236,13 +236,13 @@ uint8_t CANTransmit(CANInstance *_instance, float timeout)
 #endif
     {
         LOGWARNING("[bsp_can] CAN bus BUSY! cnt:%d", busy_count);
-        busy_count++;
+        busy_count++; 	
         return 0;
     }
     return 1; // 发送成功
 }
 
-void CANSetDLC(CANInstance *_instance, uint8_t length)
+void CANSetDLC(CANInstance *_instance, uint32_t length)
 {
     // 发送长度错误!检查调用参数是否出错,或出现野指针/越界访问
     if (length > 8 || length == 0) // 安全检查
@@ -251,7 +251,7 @@ void CANSetDLC(CANInstance *_instance, uint8_t length)
         	LOGERROR("[bsp_can] CAN DLC error! check your code or wild pointer");
         }
 
-    _instance->txconf.DataLength = length;
+    _instance->txconf.DataLength = length << 16;
 }
 
 /* -----------------------belows are callback definitions--------------------------*/

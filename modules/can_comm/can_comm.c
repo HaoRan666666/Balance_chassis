@@ -106,7 +106,7 @@ CANCommInstance *CANCommInit(CANComm_Init_Config_s *comm_config)
 void CANCommSend(CANCommInstance *instance, uint8_t *data)
 {
     static uint8_t crc8;
-    static uint8_t send_len;
+    static uint32_t send_len;
     // 将data copy到raw_sendbuf中,计算crc8
     memcpy(instance->raw_sendbuf + 2, data, instance->send_data_len);
     crc8 = crc_8(data, instance->send_data_len);

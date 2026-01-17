@@ -87,7 +87,7 @@ CANInstance *CANRegister(CAN_Init_Config_s *config);
  * @param _instance 要修改长度的can实例
  * @param length    设定长度
  */
-void CANSetDLC(CANInstance *_instance, uint8_t length);
+void CANSetDLC(CANInstance *_instance, uint32_t length);
 
 /**
  * @brief transmit mesg through CAN device,通过can实例发送消息
