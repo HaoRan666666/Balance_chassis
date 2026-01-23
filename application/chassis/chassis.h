@@ -38,4 +38,5 @@ typedef struct
 
 void Chassis_StandFromGround(void);
 void Chassis_ModelTwo(void);
+void Chassis_Control(void);
 #endif // CHASSIS_H

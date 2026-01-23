@@ -11,6 +11,11 @@
 static uint8_t idx;
 static DMMotorInstance *dm_motor_instance[DM_MOTOR_CNT];
 static osThreadId dm_task_handle[DM_MOTOR_CNT];
+
+DMMotorInstance ** Get_DM_Instance()
+{
+   return dm_motor_instance;
+}
 /* 两个用于将uint值和float值进行映射的函数,在设定发送值和解析反馈值时使用 */
 static uint16_t float_to_uint(float x, float x_min, float x_max, uint8_t bits)
 {
@@ -121,7 +126,7 @@ DMMotorInstance *DMMotorInit(Motor_Init_Config_s *config,DMMotor_WorkMode_e mode
     DWT_Delay(0.05);
 
     DMMotorSetMode(DM_CMD_MOTOR_MODE, motor);       //使能
-    //DMMotorCaliEncoder(motor);
+    // DMMotorCaliEncoder(motor); //设置零点
     DWT_Delay(0.05);
     dm_motor_instance[idx++] = motor;
     return motor;
@@ -288,14 +293,14 @@ void DMMotorSend(DMMotorInstance* motor)
         memcpy(motor->motor_can_instace->tx_buff,&motor->dm_send.POS_VEL,8u);
 
         motor->motor_can_instace->tx_id = motor->motor_can_instace->tx_id+ 0x100;
-        CANSetDLC(motor->motor_can_instace,8u);
+        // CANSetDLC(motor->motor_can_instace,8u);
         break;
     case DMMOTOR_MODE_VEL:
         memcpy(motor->motor_can_instace->tx_buff,&motor->dm_send.VEL,4u);
         memset(&motor->motor_can_instace->tx_buff[4],0,4u);
 
         motor->motor_can_instace->tx_id= motor->motor_can_instace->tx_id + 0x200;
-        CANSetDLC(motor->motor_can_instace,4u);
+        // CANSetDLC(motor->motor_can_instace,4u);
         break;
     case DMMOTOR_MODE_FORCE_POS:
         memcpy(motor->motor_can_instace->tx_buff,&motor->dm_send.FORCE_POS.position_des,4u);
@@ -305,7 +310,7 @@ void DMMotorSend(DMMotorInstance* motor)
         motor->motor_can_instace->tx_buff[7] = (uint8_t)(motor->dm_send.FORCE_POS.torque_des);
 
         motor->motor_can_instace->tx_id = motor->motor_can_instace->tx_id + 0x300;
-        CANSetDLC(motor->motor_can_instace,8);
+        // CANSetDLC(motor->motor_can_instace,8);
         break;
     default:
         break;

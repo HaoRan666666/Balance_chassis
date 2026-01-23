@@ -16,7 +16,7 @@ PIDInstance LegCoordination_ControllerPID; //双腿协调pid   (两条虚拟杆�
 // PIDInstance Roll_L0ControllerPID;          
 PIDInstance Roll_FControllerPID;
 // PIDInstance X_controllerPID;
-
+PIDInstance Yaw_ControllerPID;
 
 
 void Motion_Controller_Init(void)
@@ -34,19 +34,37 @@ void Motion_Controller_Init(void)
    Roll_FControllerPID.Kd=0;
    Roll_FControllerPID.MaxOut=0;
    Roll_FControllerPID.Need_Value=0;
+
+   Yaw_ControllerPID.Kp=0;
+   Yaw_ControllerPID.Ki=0;
+   Yaw_ControllerPID.Kd=0;
+   Yaw_ControllerPID.MaxOut=0;
+   Yaw_ControllerPID.Need_Value=0;
    
+}
+
+void Motion_Controller_Yaw_Control_Pid(float *LeftWheel_DeltaT,float *RightWheel_DeltaT)
+{
+    Balance_data* balance_status=Get_Balance_Data();
+
+    PIDCalculate(&Yaw_ControllerPID,balance_status->body_data.Yaw,Yaw_ControllerPID.Need_Value);
+
+    float T=Yaw_ControllerPID.Output;
+
+    (*LeftWheel_DeltaT)=-T/2.0f;     //正负有待验证
+    (*RightWheel_DeltaT)=T/2.0f;
 }
 
 
 void Motion_Controller_Yaw_Control(float target_Yaw,float *LeftWheel_DeltaT,float *RightWheel_DeltaT,float w_Limit)
 {
-    Body_data* body_status=Get_Balance_Data();
+      Balance_data* balance_status=Get_Balance_Data();
     //角度环
-    float phi_dot = YAW_Controll_LQR_Angel_K* (body_status->Yaw-target_Yaw);  //机身角速度
+    float phi_dot = YAW_Controll_LQR_Angel_K* (balance_status->body_data.Yaw-target_Yaw);  //机身角速度
 
     phi_dot=float_constrain(phi_dot,-w_Limit,w_Limit);//限幅
     //速度环
-    float T=YAW_Controll_LQR_Speed_K *(body_status->d_Yaw+phi_dot);//这里的加号是因为d_Yaw的正方向和期望的角速度正方向相反
+    float T=YAW_Controll_LQR_Speed_K *(balance_status->body_data.Yaw+phi_dot);//这里的加号是因为d_Yaw的正方向和期望的角速度正方向相反
 
     (*LeftWheel_DeltaT)=-T/2.0f;     //正负有待验证
     (*RightWheel_DeltaT)=T/2.0f;

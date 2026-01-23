@@ -151,7 +151,7 @@ application/chassis/chassis.c \
 application/shoot/shoot.c \
 application/cmd/robot_cmd.c \
 application/robot.c \
-Core/Src/i2c.c 
+Core/Src/i2c.c
 
 # ASM sources
 ASM_SOURCES =  \
@@ -245,6 +245,7 @@ C_INCLUDES =  \
 -Imodules/bluetooth \
 -Imodules/BMI088 \
 -Imodules/imu \
+-Imodules/Leg_Model \
 -Imodules/master_machine \
 -Imodules/motor/DJImotor \
 -Imodules/motor/LKmotor \
@@ -262,12 +263,10 @@ C_INCLUDES =  \
 -Imodules/daemon \
 -Imodules/alarm \
 -Imodules \
--Imodules/Leg_Model \
 -IMiddlewares/ST/ARM/DSP/Inc \
 -IMiddlewares/ST/ARM/DSP/Include/dsp \
 -IMiddlewares/Third_Party/SEGGER/RTT \
 -IMiddlewares/Third_Party/SEGGER/Config
-
 
 
 # compile gcc flags

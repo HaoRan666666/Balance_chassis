@@ -14,5 +14,4 @@ void RobotCMDInit();
  */
 void RobotCMDTask();
 
-
 #endif // !ROBOT_CMD_H

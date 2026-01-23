@@ -48,10 +48,7 @@ static Chassis_Ctrl_Cmd_s chassis_cmd_recv;         // 底盘接收到的控制�
 static Chassis_Upload_Data_s chassis_feedback_data; // 底盘回传的反馈数据
 
 static referee_info_t* referee_data; // 用于获取裁判系统的数据
- Referee_Interactive_info_t ui_data; // UI数据，将底盘中的数据传入此结构体的对应变量中，UI会自动检测是否变化，对应显示UI
-
-   static Vision_Recv_s *vision_recv_data; //解决了HardFault
-
+Referee_Interactive_info_t ui_data; // UI数据，将底盘中的数据传入此结构体的对应变量中，UI会自动检测是否变化，对应显示UI
 
 static SuperCapInstance *cap;                                       // 超级电容
 static DMMotorInstance *motor_lf, *motor_rf, *motor_lb, *motor_rb; //四个髋关节电机的实例
@@ -86,29 +83,36 @@ float test_motor_t_lb=-2.57;
 float test_speed_left=0;
 float test_speed_right=0;
 
+float test_phi0=PI/2;
+float test_l0=0.154;
+float test_phi1=0;
+float test_phi4=0;
+
+
+uint8_t loss_flag=0;
 void ChassisInit()
 {
     // rc_data = RemoteControlInit(&huart5); //双板的时候删除
-    vision_recv_data = VisionInit(&huart9); // 视觉通信串口
+    Observer_init();
     //髋关节电机初始化
     Motor_Init_Config_s chassis_DM_motor_config = {  
         .can_init_config.can_handle = &hcan1,
         .controller_param_init_config = { 
             .angle_PID = {
-                .Kp = 8,
-                .Ki = 0,
+                .Kp = 5,// 2
+                .Ki = 3,
                 .Kd = 0,
                 .IntegralLimit = 1,
                 .Improve = PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement,
-                .MaxOut = 3,
+                .MaxOut = 2,
             },
             .speed_PID = {
-                .Kp = 4, // 4.5
+                .Kp = 3, // 2
                 .Ki = 0,  // 0
                 .Kd = 0,  // 0
                 .IntegralLimit = 1,
                 .Improve = PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement,
-                .MaxOut = 20,
+                .MaxOut = 30,
             },
             .current_PID = {
                 .Kp = 0, // 0.4
@@ -123,16 +127,16 @@ void ChassisInit()
             .angle_feedback_source = MOTOR_FEED,
             .speed_feedback_source = MOTOR_FEED,
             .outer_loop_type = ANGLE_LOOP,
-            .close_loop_type = SPEED_LOOP | ANGLE_LOOP,
+            .close_loop_type = ANGLE_LOOP|SPEED_LOOP,
         },
         .motor_type = DM8009,
     };
     //轮电机初始化
     Motor_Init_Config_s chassis_DJI_motor_config = {  
-        .can_init_config.can_handle = &hcan3,
+        .can_init_config.can_handle = &hcan2,
         .controller_param_init_config = {
             .speed_PID = {
-                .Kp = 2, // 4.5
+                .Kp = 0, // 2
                 .Ki = 0,  // 0
                 .Kd = 0,  // 0
                 .IntegralLimit = 3000,
@@ -167,7 +171,7 @@ void ChassisInit()
 
     chassis_DM_motor_config.can_init_config.tx_id = 0x02;
     chassis_DM_motor_config.can_init_config.rx_id = 0x12;
-    chassis_DM_motor_config.controller_setting_init_config.motor_reverse_flag = MOTOR_DIRECTION_REVERSE;
+    chassis_DM_motor_config.controller_setting_init_config.motor_reverse_flag = MOTOR_DIRECTION_NORMAL;
     motor_rf = DMMotorInit(&chassis_DM_motor_config,DMMOTOR_MODE_MIT);
 
     chassis_DM_motor_config.can_init_config.tx_id = 0x03;
@@ -177,7 +181,7 @@ void ChassisInit()
 
     chassis_DM_motor_config.can_init_config.tx_id = 0x04;
     chassis_DM_motor_config.can_init_config.rx_id = 0x14;
-    chassis_DM_motor_config.controller_setting_init_config.motor_reverse_flag = MOTOR_DIRECTION_REVERSE;
+    chassis_DM_motor_config.controller_setting_init_config.motor_reverse_flag = MOTOR_DIRECTION_NORMAL;
     motor_rb = DMMotorInit(&chassis_DM_motor_config,DMMOTOR_MODE_MIT);
 
 
@@ -214,6 +218,8 @@ void ChassisInit()
         
     };
     chasiss_can_comm = CANCommInit(&comm_conf); // can comm初始化
+
+
 #endif                                          // CHASSIS_BOARD
 
 #ifdef ONE_BOARD // 单板控制整车,则通过pubsub来传递消息
@@ -257,19 +263,44 @@ static void EstimateSpeed()
     //  ...
 }
 
+static void Leg_loss_control_handle(void)
+{
+    loss_flag=1;
+    chassis_cmd_recv.chassis_mode = CHASSIS_ZERO_FORCE;
+}
+
+//腿部失控检测
+//调试阶段暂时不允许腿部转角超过一圈，用腿部摆角判断，限制在0-pi
+static void Leg_loss_control_detect(void)
+{
+    Balance_data *balance_status=Get_Balance_Data();
+    float phi0_r=balance_status->Leg_R.phi_0;
+    float phi0_l=balance_status->Leg_L.phi_0;
+    float pitch=balance_status->body_data.Pitch;
+    if(phi0_l<=-PI/18||phi0_r<=-PI/18||phi0_l>=(PI+PI/18)||phi0_r>=(PI+PI/18)||loss_flag==1)
+    {
+        LOGERROR("[CMD] Leg loss control detected!");
+        Leg_loss_control_handle();
+    }
+    // 腿部失控处理逻辑
+}
+
 /* 机器人底盘控制核心任务 */
 void ChassisTask()
 { 
     RC_ctrl_t* rc_data=Get_rc_data();
+//获取底盘数据
+    Balance_data * Balance_status=Get_Balance_Data();//获取观测器数据
     // 后续增加没收到消息的处理(双板的情况)
     // 获取新的控制信息
 #ifdef ONE_BOARD
-    SubGetMessage(chassis_sub, &chassis_cmd_recv);
+    SubGetMessage(chassis_sub, &chassis_scmd_recv);
 #endif
 #ifdef CHASSIS_BOARD
     chassis_cmd_recv = *(Chassis_Ctrl_Cmd_s *)CANCommGet(chasiss_can_comm);
 #endif // CHASSIS_BOARD
-    //   chassis_cmd_recv.chassis_mode = CHASSIS_NO_FOLLOW;
+    chassis_cmd_recv.chassis_mode = CHASSIS_NO_FOLLOW; //临时
+    Leg_loss_control_detect(); //腿部失控检测函数
     if (chassis_cmd_recv.chassis_mode == CHASSIS_ZERO_FORCE)
     { // 如果出现重要模块离线或遥控器设置为急停,让电机停止
         DMMotorStop(motor_lf);
@@ -289,7 +320,7 @@ void ChassisTask()
         DJIMotorEnable(motor_right);
     }
 
-    // 根据控制模式设定旋转速度hcan1
+    // 根据控制模式设定旋转速度
     switch (chassis_cmd_recv.chassis_mode)
     {
     case CHASSIS_NO_FOLLOW: // 底盘不旋转,但维持全向机动,一般用于调整云台姿态
@@ -304,25 +335,38 @@ void ChassisTask()
     default:
         break;
     }
+    //获取观测数据
+    Observer_DataGet();
+
+    Leg_Controller_InverseKinematicsSolution(0.154,test_phi0,&test_phi1,&test_phi4); //左腿逆运动学解算
+    
+    test_motor_t_rf=test_phi4;
+    test_motor_t_lf=test_phi4;
+
+    test_motor_t_rb=test_phi1;
+    test_motor_t_lb=test_phi1;
+    DMMotorSetRef(motor_rf,test_motor_t_rf);
+    DMMotorSetRef(motor_rb,test_motor_t_rb);
+    DMMotorSetRef(motor_lf,test_motor_t_lf);
+    DMMotorSetRef(motor_lb,test_motor_t_lb);
+
+
+    LQR_Clc(&Tl,&Tpl,&Tr,&Tpr,TargetX,TargetdX);
 
     //速度环控制  轮半径60mm  向前的速度转化为度/秒  电机转速=线速度/轮子半径
     // DJIMotorSetRef(motor_left,chassis_cmd_recv.vx/Wheel_R + chassis_cmd_recv.wz * Body_Rl);// m/s 正负号待定
     // DJIMotorSetRef(motor_right,chassis_cmd_recv.vx/Wheel_R - chassis_cmd_recv.wz * Body_Rl);
-
-    test_speed_left=rc_data->rc.rocker_l1*30+rc_data->rc.rocker_r_*10;
-    test_speed_right=rc_data->rc.rocker_l1*30-rc_data->rc.rocker_r_*10;
-    DJIMotorSetRef(motor_left,-test_speed_left);// m/s 正负号待定
-    DJIMotorSetRef(motor_right,-test_speed_right);// m/s 正负号待定
+    
+    // test_speed_left=rc_data->rc.rocker_l1*30+rc_data->rc.rocker_r_*10;
+    // test_speed_right=rc_data->rc.rocker_l1*30-rc_data->rc.rocker_r_*10;
+    // DJIMotorSetRef(motor_left,-test_speed_left);// m/s 正负号待定
+    // DJIMotorSetRef(motor_right,-test_speed_right);// m/s 正负号待定
     // 根据控制模式进行正运动学解算,计算底盘输出
     //TODO：后续添加LQR计算
     // test_motor_t_lf=rc_data->rc.rocker_l1/660.0f*10;
     // test_motor_t_rf=rc_data->rc.rocker_r1/660.0f*10;
 
-    // DMMotorSetRef(motor_rf,test_motor_t_rf);
-    DMMotorSetRef(motor_rf,test_motor_t_rf);
-    DMMotorSetRef(motor_rb,test_motor_t_rb);
-    DMMotorSetRef(motor_lf,test_motor_t_lf);
-    DMMotorSetRef(motor_lb,test_motor_t_lb);
+    // Chassis_Control();
 
     // 根据裁判系统的反馈数据和电容数据对输出限幅并设定闭环参考值
     // LimitChassisOutput();
@@ -475,9 +519,8 @@ void Chassis_StandFromGround(void)
 	static uint16_t Balance_Count=0;   //平衡计数
 
 /*====================关节力矩====================*/
-    float L0_l=0.10f;
-    float L0_r=0.10f;  //让腿部长度收缩到最短  
-    //TODO:大轮腿最短长度待测
+    float L0_l=0.154f;   
+    float L0_r=0.154f;  //让腿部长度收缩到最短  
 
     float phi1l,phi4l,phi1r,phi4r; 
     //计算L0长度最短并且身体竖直时的腿部角度
@@ -587,11 +630,11 @@ Motion_Controller_Roll_Control(TargetRoll,&Roll_Compensate_L0_Left,&Roll_Compens
 float Leg_Length_Control_Left_F=0,Leg_Length_Control_Right_F=0;
                //左腿部分
 Left_Leg_Pid.Need_Value=TargetL0+Roll_Compensate_L0_Left;
-float_constrain(Left_Leg_Pid.Need_Value,0.1,0.3); //TODO:待测  腿长限幅 
+float_constrain(Left_Leg_Pid.Need_Value,0.154,0.33); //TODO:待测  腿长限幅 
 if(Balance_status->Leg_L.Fn<FN_Threshold) Left_Leg_Pid.Need_Value=0.22;//离地状态
                //右腿部分
 Right_Leg_Pid.Need_Value=TargetL0+Roll_Compensate_L0_Right;
-float_constrain(Right_Leg_Pid.Need_Value,0.1,0.3); //腿长限幅
+float_constrain(Right_Leg_Pid.Need_Value,0.154,0.33); //腿长限幅
 if(Balance_status->Leg_R.Fn<FN_Threshold) Right_Leg_Pid.Need_Value=0.22;
 
 Leg_Controller_LegControl(&Leg_Length_Control_Left_F,&Leg_Length_Control_Right_F);

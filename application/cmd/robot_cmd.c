@@ -13,10 +13,12 @@
 #include "bsp_dwt.h"
 #include "bsp_log.h"
 
+#include "Observer.h"
 // 私有宏,自动将编码器转换成角度值
 #define YAW_ALIGN_ANGLE (YAW_CHASSIS_ALIGN_ECD * ECD_ANGLE_COEF_DJI) // 对齐时的角度,0-360
-#define PTICH_HORIZON_ANGLE (PITCH_HORIZON_ECD * ECD_ANGLE_COEF_DJI) // pitch水平时电机的角度,0-360
+#define PITCH_HORIZON_ANGLE (PITCH_HORIZON_ECD * ECD_ANGLE_COEF_DJI) // pitch水平时电机的角度,0-360
 
+#define LEG_LOSS_CONTROL_PITCH 1  //腿部失控时的pitch角度 ，有待测试
 /* cmd应用包含的模块实例指针和交互信息存储*/
 #ifdef GIMBAL_BOARD // 对双板的兼容,条件编译
 #include "can_comm.h"
@@ -52,7 +54,6 @@ BMI088_Data_t bmi088_data;
 void RobotCMDInit()
 {
     rc_data = RemoteControlInit(&huart5);   // 修改为对应串口,注意如果是自研板dbus协议串口需选用添加了反相器的那个
-    vision_recv_data = VisionInit(&huart9); // 视觉通信串口
 
     gimbal_cmd_pub = PubRegister("gimbal_cmd", sizeof(Gimbal_Ctrl_Cmd_s));
     gimbal_feed_sub = SubRegister("gimbal_feed", sizeof(Gimbal_Upload_Data_s));
@@ -247,6 +248,27 @@ static void MouseKeySet()
     }
 }
 
+// static void Leg_loss_control_handle(void)
+// {
+//     robot_state = ROBOT_STOP;
+//     chassis_cmd_send.chassis_mode = CHASSIS_ZERO_FORCE;
+// }
+// //腿部失控检测
+// //调试阶段暂时不允许腿部转角超过一圈，用腿部摆角判断，限制在0-pi
+// static void Leg_loss_control_detect(void)
+// {
+//     Balance_data *balance_status=Get_Balance_Data();
+//     float phi0_r=balance_status->Leg_R.phi_0;
+//     float phi0_l=balance_status->Leg_L.phi_0;
+//     float pitch=balance_status->body_data.Pitch;
+//     if(phi0_l<=0||phi0_r<=0||phi0_l>=PI||phi0_r>=PI||pitch<=-PI/3||pitch>=PI/3)
+//     {
+//         LOGERROR("[CMD] Leg loss control detected!");
+//         Leg_loss_control_handle();
+//     }
+//     // 腿部失控处理逻辑
+// }
+
 /**
  * @brief  紧急停止,包括遥控器左上侧拨轮打满/重要模块离线/双板通信失效等
  *         停止的阈值'300'待修改成合适的值,或改为开关控制.
@@ -256,6 +278,7 @@ static void MouseKeySet()
  */
 static void EmergencyHandler()
 {
+    // Leg_loss_control_detect();
     // 拨轮的向下拨超过一半进入急停模式.注意向打时下拨轮是正
     if (rc_data[TEMP].rc.dial > 300 || robot_state == ROBOT_STOP) // 还需添加重要应用和模块离线的判断
     {
@@ -298,7 +321,7 @@ void RobotCMDTask()
     else if (switch_is_up(rc_data[TEMP].rc.switch_left)) // 遥控器左侧开关状态为[上],键盘控制
         MouseKeySet();
 
-    EmergencyHandler(); // 处理模块离线和遥控器急停等紧急情况
+    EmergencyHandler(); // 处理模块离线和遥控器急停以及腿部失控等紧急情况
 
     // 设置视觉发送数据,还需增加加速度和角速度数据
     // VisionSetFlag(chassis_fetch_data.enemy_color,,chassis_fetch_data.bullet_speed)
@@ -313,5 +336,4 @@ void RobotCMDTask()
 #endif // GIMBAL_BOARD
     PubPushMessage(shoot_cmd_pub, (void *)&shoot_cmd_send);
     PubPushMessage(gimbal_cmd_pub, (void *)&gimbal_cmd_send);
-    VisionSend(&vision_send_data);
 }

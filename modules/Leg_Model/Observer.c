@@ -3,6 +3,7 @@
 #include "ins_task.h"
 #include "dmmotor.h"
 #include "dji_motor.h"
+#include "dmmotor.h"
 #include "Leg_Controller.h"
 
 Balance_data Balance_status; //储存轮腿所有数据的结构体 
@@ -13,14 +14,14 @@ Balance_data*  Get_Balance_Data()
 
 void Observer_init(void)
 {
-   Balance_status.dt=0.002;  //500hz控制频率
+   Balance_status.dt=0.001;  //1000hz控制频率
 
    // 初始化左腿变量
    Balance_status.Leg_L.ddtheta = 0;
    Balance_status.Leg_L.dtheta = 0;
    Balance_status.Leg_L.theta = 0;
    Balance_status.Leg_L.last_dtheta = 0;
-   Balance_status.Leg_L.L0=0.10;
+   Balance_status.Leg_L.L0=0.154;
    Balance_status.Leg_L.d_L0=0;
    Balance_status.Leg_L.dd_L0=0;
    // 初始化右腿变量
@@ -28,9 +29,12 @@ void Observer_init(void)
    Balance_status.Leg_R.dtheta = 0;
    Balance_status.Leg_R.theta = 0;
    Balance_status.Leg_R.last_dtheta = 0;
-   Balance_status.Leg_R.L0=0.10;
+   Balance_status.Leg_R.L0=0.154;
    Balance_status.Leg_R.d_L0=0;
    Balance_status.Leg_R.dd_L0=0;
+
+   Balance_status.body_data.x=0;
+   Balance_status.body_data.dx=0;
 
    MotionEstimation_init();
 }
@@ -57,9 +61,9 @@ void Observer_DataGet(void)
    Balance_status.body_data.a_yE = INS.MotionAccel_n[0];
    Balance_status.body_data.a_zE = INS.MotionAccel_n[2];
 
-   Balance_status.body_data.Pitch = -INS.Pitch/DEG_TO_RAD;  //注意确认一下是不是逆时针为正方向（右手定则） 
-   Balance_status.body_data.Roll  = INS.Roll/DEG_TO_RAD;   
-   Balance_status.body_data.Yaw   = INS.Yaw/DEG_TO_RAD;
+   Balance_status.body_data.Pitch = -INS.Pitch*DEG_TO_RAD;  //注意确认一下是不是逆时针为正方向（右手定则） 向前倒为负
+   Balance_status.body_data.Roll  = INS.Roll*DEG_TO_RAD;   
+   Balance_status.body_data.Yaw   = INS.Yaw*DEG_TO_RAD;
 
    Balance_status.body_data.d_pitch = -INS.Gyro[0];   //注意确认一下是不是逆时针为正方向（右手定则）
    Balance_status.body_data.d_Roll  = INS.Gyro[1];
@@ -78,25 +82,41 @@ void Observer_DataGet(void)
    Balance_status.Leg_R.wheel.x=Balance_status.Leg_R.wheel.angle * Wheel_R ;  //单位是米
    Balance_status.Leg_R.wheel.T=dji_motor_instance[1]->measure.real_current * 20 * 0.3/ 16384 * GEAR_RATIO ;//初始数据到16384,转化后乘以转矩常数
 
+    Balance_status.body_data.dx=0.5f*(Balance_status.Leg_L.wheel.speed*Wheel_R+Balance_status.Leg_R.wheel.speed*Wheel_R); //注意两个轮子的正方向，后续加入卡尔曼滤波器进行滤波处理
+   Balance_status.body_data.x+= Balance_status.body_data.dx*Balance_status.dt;
    /************************************腿部数据******************************/   
    //左腿   
-	Balance_status.Leg_L.phi_1=dm_motor_instance[0]->measure.position;//左后电机单圈角度     //小连杆与水平线夹角
-      if(Balance_status.Leg_L.phi_1<0)     //TODO：确认达妙反馈的是不是单圈角度
+	Balance_status.Leg_L.phi_1=-dm_motor_instance[2]->measure.position;//左后电机单圈角度     //小连杆与水平线夹角
+    if(Balance_status.Leg_L.phi_1<0)
    {
       Balance_status.Leg_L.phi_1=Balance_status.Leg_L.phi_1+2.0f*PI;
    }
+   if(Balance_status.Leg_L.phi_1>2.0f*PI)
+   {
+	  Balance_status.Leg_L.phi_1=Balance_status.Leg_L.phi_1-2.0f*PI;
+   }
 
-	Balance_status.Leg_L.phi_4=dm_motor_instance[2]->measure.position;//左前电机单圈角度     //大腿与水平线夹角
-	Balance_status.Leg_L.dphi_1=dm_motor_instance[0]->measure.velocity;  //注意正方向问题 ，应该是以逆时针为正方向
-   Balance_status.Leg_L.dphi_4=dm_motor_instance[2]->measure.velocity;  //注意正方向问题 ，应该是以逆时针为正方向
+	Balance_status.Leg_L.phi_4=-dm_motor_instance[0]->measure.position;//左前电机单圈角度     //大腿与水平线夹角
+		//归化到-pi到pi
+   if(Balance_status.Leg_L.phi_4<-PI)
+   {
+	  Balance_status.Leg_L.phi_4=Balance_status.Leg_L.phi_4+2.0f*PI;
+   }
+	 if(Balance_status.Leg_L.phi_4>PI)
+   {
+	  Balance_status.Leg_L.phi_4=Balance_status.Leg_L.phi_4-2.0f*PI;
+   }
+
+	Balance_status.Leg_L.dphi_1=-dm_motor_instance[2]->measure.velocity;  //注意正方向问题 ，应该是以逆时针为正方向
+    Balance_status.Leg_L.dphi_4=-dm_motor_instance[0]->measure.velocity;  //注意正方向问题 ，应该是以逆时针为正方向
 
    if(Balance_status.Leg_L.phi_1!=0&&Balance_status.Leg_L.phi_4!=0)//防止出现除零
    {
       Observer_LegForwardKinematicsSolution(&(Balance_status.Leg_L));
    }
 	
-	Balance_status.Leg_L.T1=dm_motor_instance[0]->measure.torque;   //小连杆电机扭矩    逆时针为正   //需要归化到0-2pi
-	Balance_status.Leg_L.T2=dm_motor_instance[2]->measure.torque;   //大腿电机扭矩      逆时针为正
+	Balance_status.Leg_L.T1=-dm_motor_instance[2]->measure.torque;   //小连杆电机扭矩    逆时针为正   //需要归化到0-2pi
+	Balance_status.Leg_L.T2=-dm_motor_instance[0]->measure.torque;   //大腿电机扭矩      逆时针为正
 	
 	Balance_status.Leg_L.theta=PI/2.0f-(Balance_status.Leg_L.phi_0+Balance_status.body_data.Pitch*DEG_TO_RAD);  
 	Balance_status.Leg_L.last_dtheta=Balance_status.Leg_L.dtheta;
@@ -106,23 +126,36 @@ void Observer_DataGet(void)
 	Observer_GetFN(&Balance_status.Leg_L);
 	
 	//右腿
-	Balance_status.Leg_R.phi_1=dm_motor_instance[1]->measure.position;//右后电机单圈角度     //小连杆与水平线夹角
+	Balance_status.Leg_R.phi_1=dm_motor_instance[3]->measure.position;//右后电机单圈角度     //小连杆与水平线夹角
    //由-pi到pi归化到0-2pi
    if(Balance_status.Leg_R.phi_1<0)
    {
       Balance_status.Leg_R.phi_1=Balance_status.Leg_R.phi_1+2.0f*PI;
    }
+     if(Balance_status.Leg_R.phi_1>2.0f*PI)
+   {
+	  Balance_status.Leg_R.phi_1=Balance_status.Leg_R.phi_1-2.0f*PI;
+   }
 
-	Balance_status.Leg_R.phi_4=dm_motor_instance[3]->measure.position;//右前电机单圈角度     //大腿与水平线夹角
-	Balance_status.Leg_R.dphi_1=dm_motor_instance[1]->measure.velocity;  //注意正方向问题 ，应该是以逆时针为正方向
-   Balance_status.Leg_R.dphi_4=dm_motor_instance[3]->measure.velocity;  //注意正方向问题 ，应该是以逆时针为正方向
+	
+   Balance_status.Leg_R.phi_4=dm_motor_instance[1]->measure.position;//右前电机单圈角度     //大腿与水平线夹角
+	if(Balance_status.Leg_R.phi_4<-PI)
+	{
+		Balance_status.Leg_R.phi_4=Balance_status.Leg_R.phi_4+2.0f*PI;
+	}
+		if(Balance_status.Leg_R.phi_4>PI)
+	{
+		Balance_status.Leg_R.phi_4=Balance_status.Leg_R.phi_4-2.0f*PI;
+	}
+	Balance_status.Leg_R.dphi_1=dm_motor_instance[3]->measure.velocity;  //注意正方向问题 ，应该是以逆时针为正方向
+    Balance_status.Leg_R.dphi_4=dm_motor_instance[1]->measure.velocity;  //注意正方向问题 ，应该是以逆时针为正方向
 
     if(Balance_status.Leg_R.phi_1!=0&&Balance_status.Leg_R.phi_4!=0)//防止出现除零
    {
 	Observer_LegForwardKinematicsSolution(&(Balance_status.Leg_R));
    }
-	Balance_status.Leg_R.T1=dm_motor_instance[1]->measure.torque;   //小连杆电机扭矩    逆时针为正
-	Balance_status.Leg_R.T2=dm_motor_instance[3]->measure.torque;   //大腿电机扭矩      逆时针为正
+	Balance_status.Leg_R.T1=dm_motor_instance[3]->measure.torque;   //小连杆电机扭矩    逆时针为正
+	Balance_status.Leg_R.T2=dm_motor_instance[1]->measure.torque;   //大腿电机扭矩      逆时针为正
 	
 	Balance_status.Leg_R.theta=PI/2.0f-(Balance_status.Leg_R.phi_0+Balance_status.body_data.Pitch * DEG_TO_RAD);  
 	Balance_status.Leg_R.last_dtheta=Balance_status.Leg_R.dtheta;
@@ -135,7 +168,7 @@ void Observer_DataGet(void)
 	/************************************机体数据******************************/
 
 	//运动估计
-	MotionEstimation_Update();
+	// MotionEstimation_Update();
 	
 	//功率
 

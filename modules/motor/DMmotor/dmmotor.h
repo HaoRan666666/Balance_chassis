@@ -9,8 +9,8 @@
 #define DM_MOTOR_CNT 4
 
 // TODO: 根据电机手册修改下面的最小最大值
-#define DM_P_MIN  (-12.5f)
-#define DM_P_MAX  12.5f
+#define DM_P_MIN  (-12.56f)
+#define DM_P_MAX  12.56f
 #define DM_V_MIN  (-45.0f)
 #define DM_V_MAX  45.0f
 #define DM_T_MIN  (-54.0f)
@@ -113,5 +113,5 @@ DMMotorInstance *DMMotorInit(Motor_Init_Config_s *config ,DMMotor_WorkMode_e mod
 void DMMotorSetPosVel(DMMotorInstance *motor, float pos,float vel);
 void DMMotorSetVel(DMMotorInstance *motor, float vel);
 
-DMMotorInstance * Get_DM_Instance();
+DMMotorInstance ** Get_DM_Instance();
 #endif // !DMMOTOR
