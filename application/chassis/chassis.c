@@ -88,12 +88,17 @@ float test_l0=0.154;
 float test_phi1=0;
 float test_phi4=0;
 
+float YAW_Control_conpensasion_L=0;
+float YAW_Control_conpensasion_R=0;
 
 uint8_t loss_flag=0;
+uint8_t Leg_init_flag=0;
+
 void ChassisInit()
 {
     // rc_data = RemoteControlInit(&huart5); //双板的时候删除
     Observer_init();
+    Motion_Controller_Init();
     //髋关节电机初始化
     Motor_Init_Config_s chassis_DM_motor_config = {  
         .can_init_config.can_handle = &hcan1,
@@ -102,17 +107,17 @@ void ChassisInit()
                 .Kp = 5,// 2
                 .Ki = 3,
                 .Kd = 0,
-                .IntegralLimit = 1,
+                .IntegralLimit = 2,
                 .Improve = PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement,
-                .MaxOut = 2,
+                .MaxOut = 4,
             },
             .speed_PID = {
                 .Kp = 3, // 2
                 .Ki = 0,  // 0
                 .Kd = 0,  // 0
-                .IntegralLimit = 1,
+                .IntegralLimit = 10,
                 .Improve = PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement,
-                .MaxOut = 30,
+                .MaxOut = 40,
             },
             .current_PID = {
                 .Kp = 0, // 0.4
@@ -136,7 +141,7 @@ void ChassisInit()
         .can_init_config.can_handle = &hcan2,
         .controller_param_init_config = {
             .speed_PID = {
-                .Kp = 0, // 2
+                .Kp = 2, // 2
                 .Ki = 0,  // 0
                 .Kd = 0,  // 0
                 .IntegralLimit = 3000,
@@ -155,8 +160,8 @@ void ChassisInit()
         .controller_setting_init_config = {
             .angle_feedback_source = MOTOR_FEED,
             .speed_feedback_source = MOTOR_FEED,
-            .outer_loop_type = SPEED_LOOP,
-            .close_loop_type = SPEED_LOOP | CURRENT_LOOP,
+            .outer_loop_type = CURRENT_LOOP,
+            .close_loop_type = CURRENT_LOOP,
         },
         .motor_type = M3508,
     };
@@ -276,13 +281,40 @@ static void Leg_loss_control_detect(void)
     Balance_data *balance_status=Get_Balance_Data();
     float phi0_r=balance_status->Leg_R.phi_0;
     float phi0_l=balance_status->Leg_L.phi_0;
-    float pitch=balance_status->body_data.Pitch;
     if(phi0_l<=-PI/18||phi0_r<=-PI/18||phi0_l>=(PI+PI/18)||phi0_r>=(PI+PI/18)||loss_flag==1)
     {
         LOGERROR("[CMD] Leg loss control detected!");
         Leg_loss_control_handle();
     }
     // 腿部失控处理逻辑
+}
+
+static void Leg_init_detect(void)
+{
+    static Init_cnt=0;
+    Balance_data *balance_status=Get_Balance_Data();
+    float ph11_r=balance_status->Leg_R.phi_1;
+    float phi1_l=balance_status->Leg_L.phi_1;
+    float phi4_r=balance_status->Leg_R.phi_4;
+    float phi4_l=balance_status->Leg_L.phi_4;
+    if(fabs(test_motor_t_lb-phi1_l)<0.1||
+       fabs(test_motor_t_rb-ph11_r)<0.1||
+       fabs(test_motor_t_lf-phi4_l)<0.1||
+       fabs(test_motor_t_rf-phi4_r)<0.1)
+    {
+        Init_cnt++;
+    }
+    else
+    {
+        Init_cnt=0;
+    }
+
+    if(Init_cnt>=500)
+    {
+        Leg_init_flag=1;
+        Init_cnt=0;
+    }
+
 }
 
 /* 机器人底盘控制核心任务 */
@@ -338,7 +370,7 @@ void ChassisTask()
     //获取观测数据
     Observer_DataGet();
 
-    Leg_Controller_InverseKinematicsSolution(0.154,test_phi0,&test_phi1,&test_phi4); //左腿逆运动学解算
+    Leg_Controller_InverseKinematicsSolution(0.154,test_phi0-0.28,&test_phi1,&test_phi4); //左腿逆运动学解算
     
     test_motor_t_rf=test_phi4;
     test_motor_t_lf=test_phi4;
@@ -350,17 +382,33 @@ void ChassisTask()
     DMMotorSetRef(motor_lf,test_motor_t_lf);
     DMMotorSetRef(motor_lb,test_motor_t_lb);
 
-
+    Leg_init_detect();
+    if(Leg_init_flag)
+    {
+    TargetX=0;
+    TargetdX=0;
     LQR_Clc(&Tl,&Tpl,&Tr,&Tpr,TargetX,TargetdX);
+
+    Motion_Controller_Yaw_Control_Pid(&YAW_Control_conpensasion_L,&YAW_Control_conpensasion_R);
+    Tl+=YAW_Control_conpensasion_L;
+    Tr+=YAW_Control_conpensasion_R;
+
+    Chassis_Wheel_Control(Tl,Tr);
+    }
+    
+    // Tl+=YAW_Control_conpensasion_L;
+    // Tr+=YAW_Control_conpensasion_R;
+
+    // Chassis_Wheel_Control(Tl,Tr);
 
     //速度环控制  轮半径60mm  向前的速度转化为度/秒  电机转速=线速度/轮子半径
     // DJIMotorSetRef(motor_left,chassis_cmd_recv.vx/Wheel_R + chassis_cmd_recv.wz * Body_Rl);// m/s 正负号待定
     // DJIMotorSetRef(motor_right,chassis_cmd_recv.vx/Wheel_R - chassis_cmd_recv.wz * Body_Rl);
     
-    // test_speed_left=rc_data->rc.rocker_l1*30+rc_data->rc.rocker_r_*10;
-    // test_speed_right=rc_data->rc.rocker_l1*30-rc_data->rc.rocker_r_*10;
-    // DJIMotorSetRef(motor_left,-test_speed_left);// m/s 正负号待定
-    // DJIMotorSetRef(motor_right,-test_speed_right);// m/s 正负号待定
+    // test_speed_left=rc_data->rc.rocker_l1;
+    // test_speed_right=rc_data->rc.rocker_l1;
+    // DJIMotorSetRef(motor_left,-test_speed_left*10);// m/s 正负号待定
+    // DJIMotorSetRef(motor_right,-test_speed_right*10);// m/s 正负号待定
     // 根据控制模式进行正运动学解算,计算底盘输出
     //TODO：后续添加LQR计算
     // test_motor_t_lf=rc_data->rc.rocker_l1/660.0f*10;
@@ -429,10 +477,9 @@ void Balance_Control_Init(void)
  */
 void Chassis_Wheel_Control(float T_l ,float T_r)
 {
-    //转矩常数*电流*减速比=转矩
-    //电流=转矩/(转矩常数*减速比)
-    float Tau_l = T_l / CURRENT_TO_TORQUE / GEAR_RATIO ;  //目标力矩转化为目标电流
-    float Tau_r = T_r / CURRENT_TO_TORQUE / GEAR_RATIO ;
+    //转矩常数*电流=转矩
+    float Tau_l = T_l / 0.24628 ;  //目标力矩转化为目标电流
+    float Tau_r = T_r / 0.24628 ;  //目标力矩转化为目标电流
 
     Tau_l= Tau_l / 20.0f * 16384; //映射到电机输入范围   
     Tau_r= Tau_r / 20.0f * 16384; 
