@@ -40,4 +40,5 @@ void Chassis_StandFromGround(void);
 void Chassis_ModelTwo(void);
 void Chassis_Control(void);
 void Chassis_Wheel_Control(float T_l ,float T_r);
+void Chassis_MotorControl_Leg_init(float T1_l,float T2_l,float T1_r,float T2_r);
 #endif // CHASSIS_H

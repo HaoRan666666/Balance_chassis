@@ -75,14 +75,14 @@ void Observer_DataGet(void)
    Balance_status.Leg_L.wheel.angle=dji_motor_instance[0]->measure.total_angle * left_reversal_factor * DEG_TO_RAD / GEAR_RATIO;  //总角度（rad）
    Balance_status.Leg_L.wheel.speed=dji_motor_instance[0]->measure.speed_aps* left_reversal_factor*DEG_TO_RAD / GEAR_RATIO;    
    Balance_status.Leg_L.wheel.x=Balance_status.Leg_L.wheel.angle * Wheel_R ;  //单位是米
-   Balance_status.Leg_L.wheel.T=dji_motor_instance[0]->measure.real_current* left_reversal_factor * 20 * 0.3 / 16384 * GEAR_RATIO;//初始数据到16384,转化后乘以转矩常数
+   Balance_status.Leg_L.wheel.T=dji_motor_instance[0]->measure.real_current* left_reversal_factor * 0.24628 * 20 / 16384 ;//初始数据到16384,转化后乘以转矩常数
    //右轮
    Balance_status.Leg_R.wheel.angle=dji_motor_instance[1]->measure.total_angle*DEG_TO_RAD/GEAR_RATIO;  //总角度 //注意单位换算
    Balance_status.Leg_R.wheel.speed=dji_motor_instance[1]->measure.speed_aps*DEG_TO_RAD/GEAR_RATIO;  
    Balance_status.Leg_R.wheel.x=Balance_status.Leg_R.wheel.angle * Wheel_R ;  //单位是米
-   Balance_status.Leg_R.wheel.T=dji_motor_instance[1]->measure.real_current * 20 * 0.3/ 16384 * GEAR_RATIO ;//初始数据到16384,转化后乘以转矩常数
+   Balance_status.Leg_R.wheel.T=dji_motor_instance[1]->measure.real_current * 0.24628 * 20 / 16384  ;
 
-    Balance_status.body_data.dx=0.5f*(Balance_status.Leg_L.wheel.speed*Wheel_R+Balance_status.Leg_R.wheel.speed*Wheel_R); //注意两个轮子的正方向，后续加入卡尔曼滤波器进行滤波处理
+   Balance_status.body_data.dx=0.5f*(Balance_status.Leg_L.wheel.speed*Wheel_R+Balance_status.Leg_R.wheel.speed*Wheel_R); //注意两个轮子的正方向，后续加入卡尔曼滤波器进行滤波处理
    Balance_status.body_data.x+= Balance_status.body_data.dx*Balance_status.dt;
    /************************************腿部数据******************************/   
    //左腿   
@@ -118,7 +118,7 @@ void Observer_DataGet(void)
 	Balance_status.Leg_L.T1=-dm_motor_instance[2]->measure.torque;   //小连杆电机扭矩    逆时针为正   //需要归化到0-2pi
 	Balance_status.Leg_L.T2=-dm_motor_instance[0]->measure.torque;   //大腿电机扭矩      逆时针为正
 	
-	Balance_status.Leg_L.theta=PI/2.0f-(Balance_status.Leg_L.phi_0+Balance_status.body_data.Pitch*DEG_TO_RAD);  
+	Balance_status.Leg_L.theta=PI/2.0f-(Balance_status.Leg_L.phi_0+Balance_status.body_data.Pitch);  
 	Balance_status.Leg_L.last_dtheta=Balance_status.Leg_L.dtheta;
 	Balance_status.Leg_L.dtheta=-(Balance_status.Leg_L.dphi_0+Balance_status.body_data.d_pitch);     //顺时针为正
 	Balance_status.Leg_L.ddtheta=0.19f*(Balance_status.Leg_L.dtheta-Balance_status.Leg_L.last_dtheta)/Balance_status.dt+0.81f*Balance_status.Leg_L.ddtheta;//一阶低通滤波
@@ -157,7 +157,7 @@ void Observer_DataGet(void)
 	Balance_status.Leg_R.T1=dm_motor_instance[3]->measure.torque;   //小连杆电机扭矩    逆时针为正
 	Balance_status.Leg_R.T2=dm_motor_instance[1]->measure.torque;   //大腿电机扭矩      逆时针为正
 	
-	Balance_status.Leg_R.theta=PI/2.0f-(Balance_status.Leg_R.phi_0+Balance_status.body_data.Pitch * DEG_TO_RAD);  
+	Balance_status.Leg_R.theta=PI/2.0f-(Balance_status.Leg_R.phi_0+Balance_status.body_data.Pitch);  
 	Balance_status.Leg_R.last_dtheta=Balance_status.Leg_R.dtheta;
 	Balance_status.Leg_R.dtheta=-(Balance_status.Leg_R.dphi_0+Balance_status.body_data.d_pitch);     //顺时针为正
 
@@ -244,14 +244,12 @@ void Observer_LegForwardKinematicsSolution(Leg_data *Leg)
 
 /*
  *函数简介:支持力解算
- *参数说明:无
+ *参数说明:腿部观测值
  *返回类型:无
  *备注:无
  */
 void Observer_GetFN(Leg_data *Leg)
 {
-	//z_ddot_w=z_ddot_M-L_ddot_0*cos(theta)+2*L_dot_0*theta_dot*sin(theta)+L_0*theta_ddot*sin(theta)+L_0*theta_dot^2*cos(theta)
-	//F_N=P+m_w*g+m_w*z_ddot_w
 	float COS=arm_cos_f32(Leg->theta);
 	float SIN=arm_sin_f32(Leg->theta);
 	

@@ -94,11 +94,13 @@ float YAW_Control_conpensasion_R=0;
 uint8_t loss_flag=0;
 uint8_t Leg_init_flag=0;
 
+uint8_t theta_init_flag=0;
 void ChassisInit()
 {
     // rc_data = RemoteControlInit(&huart5); //双板的时候删除
     Observer_init();
     Motion_Controller_Init();
+    Leg_Controller_LegControlInit();
     //髋关节电机初始化
     Motor_Init_Config_s chassis_DM_motor_config = {  
         .can_init_config.can_handle = &hcan1,
@@ -131,8 +133,8 @@ void ChassisInit()
         .controller_setting_init_config = {
             .angle_feedback_source = MOTOR_FEED,
             .speed_feedback_source = MOTOR_FEED,
-            .outer_loop_type = ANGLE_LOOP,
-            .close_loop_type = ANGLE_LOOP|SPEED_LOOP,
+            .outer_loop_type = CURRENT_LOOP,
+            .close_loop_type = CURRENT_LOOP,
         },
         .motor_type = DM8009,
     };
@@ -291,7 +293,7 @@ static void Leg_loss_control_detect(void)
 
 static void Leg_init_detect(void)
 {
-    static Init_cnt=0;
+    static uint16_t Init_cnt=0;
     Balance_data *balance_status=Get_Balance_Data();
     float ph11_r=balance_status->Leg_R.phi_1;
     float phi1_l=balance_status->Leg_L.phi_1;
@@ -370,31 +372,65 @@ void ChassisTask()
     //获取观测数据
     Observer_DataGet();
 
-    Leg_Controller_InverseKinematicsSolution(0.154,test_phi0-0.28,&test_phi1,&test_phi4); //左腿逆运动学解算
+    // test_phi0=PI/2;
+    // test_l0=0.154f; //小腿最短长度 
+    // Leg_Controller_InverseKinematicsSolution(test_l0,test_phi0,&test_phi1,&test_phi4);
     
-    test_motor_t_rf=test_phi4;
-    test_motor_t_lf=test_phi4;
-
-    test_motor_t_rb=test_phi1;
-    test_motor_t_lb=test_phi1;
-    DMMotorSetRef(motor_rf,test_motor_t_rf);
-    DMMotorSetRef(motor_rb,test_motor_t_rb);
-    DMMotorSetRef(motor_lf,test_motor_t_lf);
-    DMMotorSetRef(motor_lb,test_motor_t_lb);
-
-    Leg_init_detect();
-    if(Leg_init_flag)
+    // test_motor_t_rf=test_phi4;
+    // test_motor_t_lf=test_phi4;
+	
+    // test_motor_t_rb=test_phi1;
+    // test_motor_t_lb=test_phi1;
+    // DMMotorSetRef(motor_rf,test_motor_t_rf);
+    // DMMotorSetRef(motor_rb,test_motor_t_rb);
+    // DMMotorSetRef(motor_lf,test_motor_t_lf);
+    // DMMotorSetRef(motor_lb,test_motor_t_lb);
+    TargetdX=rc_data->rc.rocker_l1/660.0f/2;
+    TargetX+=TargetdX*Balance_status->dt;
+    Target_Yaw-=rc_data->rc.rocker_r_/660.0f*Balance_status->dt;
+    if((Balance_status->Leg_L.phi_0!=0&&Balance_status->Leg_R.phi_0!=0)||theta_init_flag==1)
     {
-    TargetX=0;
-    TargetdX=0;
+    theta_init_flag=1;
+    // 进行LQR计算
     LQR_Clc(&Tl,&Tpl,&Tr,&Tpr,TargetX,TargetdX);
 
-    Motion_Controller_Yaw_Control_Pid(&YAW_Control_conpensasion_L,&YAW_Control_conpensasion_R);
+    //腿长控制->F
+    float Leg_Length_Control_Left_F,Leg_Length_Control_Right_F;
+    TargetL0=0.154f; //目标腿长
+    //左腿部分
+    Left_Leg_Pid.Need_Value=TargetL0;
+    float_constrain(Left_Leg_Pid.Need_Value,0.154,0.33); //腿长限幅
+     //右腿部分
+    Right_Leg_Pid.Need_Value=TargetL0;
+    float_constrain(Right_Leg_Pid.Need_Value,0.154,0.33); //腿长限幅
+
+    Leg_Controller_LegControl(&Leg_Length_Control_Left_F,&Leg_Length_Control_Right_F);
+
+    Fl=Leg_Length_Control_Left_F+20 / arm_cos_f32(Balance_status->Leg_L.theta); 
+    Fr=Leg_Length_Control_Right_F+20 / arm_cos_f32(Balance_status->Leg_R.theta);
+
+    Leg_Controller_VMC(Balance_status->Leg_L,Fl,Tpl,&T1l,&T2l);
+    Leg_Controller_VMC(Balance_status->Leg_R,Fr,Tpr,&T1r,&T2r);
+    Chassis_MotorControl_Leg_init(T1l,T2l,T1r,T2r);
+
+
+    Motion_Controller_Yaw_Control_Pid(&YAW_Control_conpensasion_L,&YAW_Control_conpensasion_R,Target_Yaw);
     Tl+=YAW_Control_conpensasion_L;
     Tr+=YAW_Control_conpensasion_R;
-
     Chassis_Wheel_Control(Tl,Tr);
     }
+   
+
+    // Leg_init_detect();
+    // if(Leg_init_flag)
+    // {     
+    // LQR_Clc(&Tl,&Tpl,&Tr,&Tpr,TargetX,TargetdX);
+    // Motion_Controller_Yaw_Control_Pid(&YAW_Control_conpensasion_L,&YAW_Control_conpensasion_R);
+    // Tl+=YAW_Control_conpensasion_L;
+    // Tr+=YAW_Control_conpensasion_R;
+
+    // // Chassis_Wheel_Control(Tl,Tr);
+    // }
     
     // Tl+=YAW_Control_conpensasion_L;
     // Tr+=YAW_Control_conpensasion_R;
@@ -483,6 +519,10 @@ void Chassis_Wheel_Control(float T_l ,float T_r)
 
     Tau_l= Tau_l / 20.0f * 16384; //映射到电机输入范围   
     Tau_r= Tau_r / 20.0f * 16384; 
+    if(Tau_l>16384)Tau_l=16384;
+    if(Tau_r>16384)Tau_r=16384;
+    if(Tau_l<-16384)Tau_l=-16384;
+    if(Tau_r<-16384)Tau_r=-16384;
 
     DJIMotorSetRef(motor_left,Tau_l);
     DJIMotorSetRef(motor_right,Tau_r);

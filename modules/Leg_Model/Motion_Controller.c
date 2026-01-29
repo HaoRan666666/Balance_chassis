@@ -35,7 +35,7 @@ void Motion_Controller_Init(void)
    Roll_FControllerPID.MaxOut=0;
    Roll_FControllerPID.Need_Value=0;
 
-   Yaw_ControllerPID.Kp=-2;
+   Yaw_ControllerPID.Kp=-4;
    Yaw_ControllerPID.Ki=0;
    Yaw_ControllerPID.Kd=0;
    Yaw_ControllerPID.MaxOut=3;
@@ -43,15 +43,16 @@ void Motion_Controller_Init(void)
    
 }
 
-void Motion_Controller_Yaw_Control_Pid(float *LeftWheel_DeltaT,float *RightWheel_DeltaT)
+void Motion_Controller_Yaw_Control_Pid(float *LeftWheel_DeltaT,float *RightWheel_DeltaT,float Target_Yaw)
 {
     Balance_data* balance_status=Get_Balance_Data();
 
+    Yaw_ControllerPID.Need_Value=Target_Yaw;
     PIDCalculate(&Yaw_ControllerPID,balance_status->body_data.Yaw,Yaw_ControllerPID.Need_Value);
 
     float T=Yaw_ControllerPID.Output;
 
-    (*LeftWheel_DeltaT)=-T/2.0f;     //正负有待验证
+    (*LeftWheel_DeltaT)=-T/2.0f;    
     (*RightWheel_DeltaT)=T/2.0f;
 }
 

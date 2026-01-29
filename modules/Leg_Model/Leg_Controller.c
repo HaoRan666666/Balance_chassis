@@ -10,8 +10,8 @@ PIDInstance Left_Leg_Pid,Right_Leg_Pid; //腿长控制pid结构体
  *参数说明:腿部状态结构体
  *参数说明:摆杆推力F
  *参数说明:摆杆扭矩Tp
- *参数说明:髋关节转矩T1
- *参数说明:膝关节转矩T2
+ *参数说明:小腿转矩T1
+ *参数说明:大腿转矩T2
  *返回类型:无
  *备注:无
  */
@@ -30,19 +30,19 @@ void Leg_Controller_VMC(Leg_data Leg,float F,float Tp,float *T1,float *T2)
  */
 void Leg_Controller_LegControlInit(void)
 {
-    Left_Leg_Pid.Kp=0;
+    Left_Leg_Pid.Kp=1200;
 	Left_Leg_Pid.Ki=0;
 	Left_Leg_Pid.Kd=0;
 	Left_Leg_Pid.DeadBand=0;
-	Left_Leg_Pid.MaxOut=0;
-	Left_Leg_Pid.Need_Value=0.14;
+	Left_Leg_Pid.MaxOut=200;
+	Left_Leg_Pid.Need_Value=0.16;
 
-	Right_Leg_Pid.Kp=0;
+	Right_Leg_Pid.Kp=1200;
 	Right_Leg_Pid.Ki=0;
 	Right_Leg_Pid.Kd=0;
 	Right_Leg_Pid.DeadBand=0;
-	Right_Leg_Pid.MaxOut=0;
-	Right_Leg_Pid.Need_Value=0.14;
+	Right_Leg_Pid.MaxOut=200;
+	Right_Leg_Pid.Need_Value=0.16;
 }
 
 
