@@ -45,13 +45,13 @@ void OSTaskInit()
     osThreadDef(daemontask, StartDAEMONTASK, osPriorityNormal, 0, 128);
     daemonTaskHandle = osThreadCreate(osThread(daemontask), NULL);
 
-    osThreadDef(robottask, StartROBOTTASK, osPriorityNormal, 0, 1024);
+    osThreadDef(robottask, StartROBOTTASK, osPriorityNormal, 0, 2048);
     robotTaskHandle = osThreadCreate(osThread(robottask), NULL);
 
     osThreadDef(uitask, StartUITASK, osPriorityNormal, 0, 512);
     uiTaskHandle = osThreadCreate(osThread(uitask), NULL);
 
-     DMMotorControlInit(); 
+    DMMotorControlInit(); 
 }
 
 __attribute__((noreturn)) void StartINSTASK(void const *argument)

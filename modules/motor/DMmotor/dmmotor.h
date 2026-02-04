@@ -113,5 +113,7 @@ DMMotorInstance *DMMotorInit(Motor_Init_Config_s *config ,DMMotor_WorkMode_e mod
 void DMMotorSetPosVel(DMMotorInstance *motor, float pos,float vel);
 void DMMotorSetVel(DMMotorInstance *motor, float vel);
 
+void DMMotorPosControl_MIT(DMMotorInstance *motor, float position,float kp);
+void DMMotorVelControl_MIT(DMMotorInstance *motor, float velocity,float kd);
 DMMotorInstance ** Get_DM_Instance();
 #endif // !DMMOTOR

@@ -35,7 +35,7 @@ void Motion_Controller_Init(void)
    Roll_FControllerPID.MaxOut=0;
    Roll_FControllerPID.Need_Value=0;
 
-   Yaw_ControllerPID.Kp=-4;
+   Yaw_ControllerPID.Kp=-3.5;
    Yaw_ControllerPID.Ki=0;
    Yaw_ControllerPID.Kd=0;
    Yaw_ControllerPID.MaxOut=3;
@@ -56,20 +56,19 @@ void Motion_Controller_Yaw_Control_Pid(float *LeftWheel_DeltaT,float *RightWheel
     (*RightWheel_DeltaT)=T/2.0f;
 }
 
+// void Motion_Controller_Yaw_Control(float target_Yaw,float *LeftWheel_DeltaT,float *RightWheel_DeltaT,float w_Limit)
+// {
+//       Balance_data* balance_status=Get_Balance_Data();
+//     //角度环
+//     float phi_dot = YAW_Controll_LQR_Angel_K* (balance_status->body_data.Yaw-target_Yaw);  //机身角速度
 
-void Motion_Controller_Yaw_Control(float target_Yaw,float *LeftWheel_DeltaT,float *RightWheel_DeltaT,float w_Limit)
-{
-      Balance_data* balance_status=Get_Balance_Data();
-    //角度环
-    float phi_dot = YAW_Controll_LQR_Angel_K* (balance_status->body_data.Yaw-target_Yaw);  //机身角速度
+//     phi_dot=float_constrain(phi_dot,-w_Limit,w_Limit);//限幅
+//     //速度环
+//     float T=YAW_Controll_LQR_Speed_K *(balance_status->body_data.Yaw+phi_dot);//这里的加号是因为d_Yaw的正方向和期望的角速度正方向相反
 
-    phi_dot=float_constrain(phi_dot,-w_Limit,w_Limit);//限幅
-    //速度环
-    float T=YAW_Controll_LQR_Speed_K *(balance_status->body_data.Yaw+phi_dot);//这里的加号是因为d_Yaw的正方向和期望的角速度正方向相反
-
-    (*LeftWheel_DeltaT)=-T/2.0f;     //正负有待验证
-    (*RightWheel_DeltaT)=T/2.0f;
-}
+//     (*LeftWheel_DeltaT)=-T/2.0f;     //正负有待验证
+//     (*RightWheel_DeltaT)=T/2.0f;
+// }
 
 /*
  *函数简介:Yaw控制(跟随云台)

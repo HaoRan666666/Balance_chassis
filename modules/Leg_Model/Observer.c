@@ -63,7 +63,7 @@ void Observer_DataGet(void)
 
    Balance_status.body_data.Pitch = -INS.Pitch*DEG_TO_RAD;  //注意确认一下是不是逆时针为正方向（右手定则） 向前倒为负
    Balance_status.body_data.Roll  = INS.Roll*DEG_TO_RAD;   
-   Balance_status.body_data.Yaw   = INS.Yaw*DEG_TO_RAD;
+   Balance_status.body_data.Yaw   = INS.YawTotalAngle*DEG_TO_RAD;
 
    Balance_status.body_data.d_pitch = -INS.Gyro[0];   //注意确认一下是不是逆时针为正方向（右手定则）
    Balance_status.body_data.d_Roll  = INS.Gyro[1];

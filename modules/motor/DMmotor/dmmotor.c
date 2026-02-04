@@ -251,6 +251,50 @@ void DMMotorPIDControl(DMMotorInstance *motor)
         motor->dm_send.MIT.torque_des = float_to_uint(0, DM_T_MIN, DM_T_MAX, 12);
 }
 
+static void DMMotorSetControlMode(DMMotor_WorkMode_e cmd, DMMotorInstance *motor)
+{
+    uint32_t mode = cmd;
+
+    motor->motor_can_instace->tx_buff[0] = motor->motor_can_instace->tx_id & 0xFF;
+    motor->motor_can_instace->tx_buff[1] = (motor->motor_can_instace->tx_id>>8) & 0xFF;
+    motor->motor_can_instace->tx_buff[2] = 0x55;
+    motor->motor_can_instace->tx_buff[3] = 0x0A;        //模式寄存器
+    motor->motor_can_instace->tx_buff[4] = (uint8_t)mode;
+
+    motor->motor_can_instace->txconf.Identifier=0x7FF;
+    CANSetDLC(motor->motor_can_instace, 8);
+    CANTransmit(motor->motor_can_instace, 1);
+}
+
+
+void DMMotorPosControl_MIT(DMMotorInstance *motor, float position,float kp)
+{
+    LIMIT_MIN_MAX(position, DM_P_MIN, DM_P_MAX);
+    motor->dm_send.MIT.position_des = float_to_uint(position, DM_P_MIN, DM_P_MAX, 16);
+    motor->dm_send.MIT.velocity_des =float_to_uint(0, DM_V_MIN, DM_V_MAX, 12);
+    motor->dm_send.MIT.Kp = float_to_uint(kp, 0, 500, 12);
+    motor->dm_send.MIT.Kd = float_to_uint(2, 0, 5, 12);
+    motor->dm_send.MIT.torque_des = float_to_uint(0, DM_T_MIN, DM_T_MAX, 12);
+
+    if(motor->stop_flag == MOTOR_STOP)
+    motor->dm_send.MIT.Kp = float_to_uint(0, DM_T_MIN, DM_T_MAX, 12);
+
+}
+
+void DMMotorVelControl_MIT(DMMotorInstance *motor, float velocity,float kd)
+{
+    LIMIT_MIN_MAX(velocity, DM_V_MIN, DM_V_MAX);
+    motor->dm_send.MIT.position_des = float_to_uint(0, DM_P_MIN, DM_P_MAX, 16);
+    motor->dm_send.MIT.velocity_des =float_to_uint(velocity, DM_V_MIN, DM_V_MAX, 12);
+    motor->dm_send.MIT.Kp = float_to_uint(0, 0, 500, 12);
+    motor->dm_send.MIT.Kd = float_to_uint(kd, 0, 5, 12);
+    motor->dm_send.MIT.torque_des = float_to_uint(0, DM_T_MIN, DM_T_MAX, 12);
+
+    if(motor->stop_flag == MOTOR_STOP)
+    motor->dm_send.MIT.velocity_des = float_to_uint(0, DM_T_MIN, DM_T_MAX, 12);
+
+}
+
 void DMMotorPosControl(DMMotorInstance *motor,float pos,float velocity)
 {
     LIMIT_MIN_MAX(pos, DM_P_MIN, DM_P_MAX);
@@ -354,6 +398,7 @@ void DMMotorTask(void const *argument)
         osDelay(2);
     }
 }
+
 void DMMotorControlInit()
 {
     char dm_task_name[5] = "dm";
@@ -365,7 +410,7 @@ void DMMotorControlInit()
         char dm_id_buff[2] = {0};
         __itoa(i, dm_id_buff, 10);
         strcat(dm_task_name, dm_id_buff);
-        osThreadDef(dm_task_name, DMMotorTask, osPriorityNormal, 0, 128);
+        osThreadDef(dm_task_name, DMMotorTask, osPriorityNormal, 0, 512);
         dm_task_handle[i] = osThreadCreate(osThread(dm_task_name), dm_motor_instance[i]);
     }
 }

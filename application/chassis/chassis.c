@@ -66,7 +66,7 @@ static RC_ctrl_t *rc_data;              // 遥控器数据,初始化时返回
 float Targetdw; //  目标角速度
 float Tl=0,Tpl=0  ,T1l=0,T2l=0,   Tr=0,Tpr=0,  T1r=0,T2r=0,   Fl=0,Fr=0;
 float Yaw_WheelDelta_T=0;//转向控制所需要叠加在轮子上的力矩差  注意用算出来的总力矩差除以2分配到两个轮子上
-float TargetX,TargetdX,Target_Yaw,TargetL0,TargetRoll,w_Limit=1.5f,YawTrack_Target;
+float TargetX,TargetdX,Target_Yaw,TargetL0=0.159,TargetRoll,w_Limit=1.5f,YawTrack_Target,Target_theta=0;
 uint8_t Chassis_Balance_Flag=0;
 uint8_t Chassis_FirstFlag2=1;
 uint8_t Chassis_Model=0;
@@ -93,6 +93,10 @@ float YAW_Control_conpensasion_R=0;
 
 uint8_t loss_flag=0;
 uint8_t Leg_init_flag=0;
+
+uint8_t Leg_init_one_flag=0;//腿部初始化第一阶段完成标志位
+uint8_t Leg_init_two_flag=0;//腿部初始化第二阶段完成标志位
+
 
 uint8_t theta_init_flag=0;
 void ChassisInit()
@@ -319,6 +323,60 @@ static void Leg_init_detect(void)
 
 }
 
+//初始化第一阶段状态检测
+void Leg_init_detect_one(void)
+{
+  #define LEG_INIT_ONE_THETATHRESHOLD 0.05
+  static uint16_t Init_cnt_one=0;
+
+  float Target_theta=1.235;
+
+  Balance_data *balance_status=Get_Balance_Data();
+  if(fabs(balance_status->Leg_L.theta-Target_theta)<LEG_INIT_ONE_THETATHRESHOLD&&fabs(balance_status->Leg_R.theta-Target_theta)<LEG_INIT_ONE_THETATHRESHOLD)
+  {
+      Init_cnt_one++;
+  }
+  else
+  {
+      Init_cnt_one=0;
+  }
+
+  if(Init_cnt_one>=50) //时间阈值有待调整
+  {
+      Leg_init_one_flag=1;//第一阶段初始化完成
+      Init_cnt_one=0;
+  }
+}
+
+//腿部初始化第一阶段
+void Leg_init_one(void)
+{
+    Balance_data *balance_status=Get_Balance_Data();
+    float T1l,T2l,T1r,T2r;
+
+     //腿长控制->F
+    float Leg_Length_Control_Left_F,Leg_Length_Control_Right_F;
+    //左腿部分
+    Left_Leg_Pid.Need_Value=0.33;//最大腿长
+    Left_Leg_Pid.Need_Value=float_constrain(Left_Leg_Pid.Need_Value,0.154,0.33); //腿长限幅
+    //右腿部分
+    Right_Leg_Pid.Need_Value=0.33;
+    Right_Leg_Pid.Need_Value=float_constrain(Right_Leg_Pid.Need_Value,0.154,0.33); //腿长限幅
+    Leg_Controller_LegControl(&Leg_Length_Control_Left_F,&Leg_Length_Control_Right_F);
+
+    Fl=Leg_Length_Control_Left_F ;
+    Fr=Leg_Length_Control_Right_F ;//+ 40 / arm_cos_f32(Balance_status->Leg_R.theta);
+
+    float Target_w=0.1;
+    Leg_Controller_AngularVelocity(&balance_status->Leg_L,&Leg_omega_ControllerPID_L,&Tpl,Target_w);
+    Leg_Controller_AngularVelocity(&balance_status->Leg_R,&Leg_omega_ControllerPID_R,&Tpr,Target_w);
+
+    Leg_Controller_VMC(balance_status->Leg_L,Fl,Tpl,&T1l,&T2l);
+    Leg_Controller_VMC(balance_status->Leg_R,Fr,Tpr,&T1r,&T2r);
+    Chassis_MotorControl_Leg_init(T1l,T2l,T1r,T2r);
+}
+
+
 /* 机器人底盘控制核心任务 */
 void ChassisTask()
 { 
@@ -372,47 +430,40 @@ void ChassisTask()
     //获取观测数据
     Observer_DataGet();
 
-    // test_phi0=PI/2;
-    // test_l0=0.154f; //小腿最短长度 
-    // Leg_Controller_InverseKinematicsSolution(test_l0,test_phi0,&test_phi1,&test_phi4);
-    
-    // test_motor_t_rf=test_phi4;
-    // test_motor_t_lf=test_phi4;
-	
-    // test_motor_t_rb=test_phi1;
-    // test_motor_t_lb=test_phi1;
-    // DMMotorSetRef(motor_rf,test_motor_t_rf);
-    // DMMotorSetRef(motor_rb,test_motor_t_rb);
-    // DMMotorSetRef(motor_lf,test_motor_t_lf);
-    // DMMotorSetRef(motor_lb,test_motor_t_lb);
-    TargetdX=rc_data->rc.rocker_l1/660.0f/2;
+    TargetdX=rc_data->rc.rocker_l1/660.0f;
     TargetX+=TargetdX*Balance_status->dt;
-    Target_Yaw-=rc_data->rc.rocker_r_/660.0f*Balance_status->dt;
+    Targetdw=rc_data->rc.rocker_r_/660.0f*2;
+    Target_Yaw-=Targetdw*Balance_status->dt;
+    if(rc_data->rc.dial<=-100) TargetL0+=0.05*Balance_status->dt;
+    else if(rc_data->rc.dial>=100) TargetL0-=0.05*Balance_status->dt;
+
+    float Target_dtheta;
+    Target_dtheta=rc_data->rc.rocker_l1/660.0f;
+    Target_theta-=Target_dtheta*Balance_status->dt;
+
+    //腿长控制->F
+    float Leg_Length_Control_Left_F,Leg_Length_Control_Right_F;
+    //左腿部分
+    Left_Leg_Pid.Need_Value=TargetL0;
+    Left_Leg_Pid.Need_Value=float_constrain(Left_Leg_Pid.Need_Value,0.159,0.33); //腿长限幅
+    //右腿部分
+    Right_Leg_Pid.Need_Value=TargetL0;
+    Right_Leg_Pid.Need_Value=float_constrain(Right_Leg_Pid.Need_Value,0.159,0.33); //腿长限幅
+    Leg_Controller_LegControl(&Leg_Length_Control_Left_F,&Leg_Length_Control_Right_F);
+
+    // theta_init_flag=1;//临时！！！！！！！！！！！！！！！！！！！！记得删掉
     if((Balance_status->Leg_L.phi_0!=0&&Balance_status->Leg_R.phi_0!=0)||theta_init_flag==1)
     {
     theta_init_flag=1;
     // 进行LQR计算
-    LQR_Clc(&Tl,&Tpl,&Tr,&Tpr,TargetX,TargetdX);
+    LQR_Clc(&Tl,&Tpl,&Tr,&Tpr,TargetX,TargetdX,Target_theta);
 
-    //腿长控制->F
-    float Leg_Length_Control_Left_F,Leg_Length_Control_Right_F;
-    TargetL0=0.154f; //目标腿长
-    //左腿部分
-    Left_Leg_Pid.Need_Value=TargetL0;
-    float_constrain(Left_Leg_Pid.Need_Value,0.154,0.33); //腿长限幅
-     //右腿部分
-    Right_Leg_Pid.Need_Value=TargetL0;
-    float_constrain(Right_Leg_Pid.Need_Value,0.154,0.33); //腿长限幅
-
-    Leg_Controller_LegControl(&Leg_Length_Control_Left_F,&Leg_Length_Control_Right_F);
-
-    Fl=Leg_Length_Control_Left_F+20 / arm_cos_f32(Balance_status->Leg_L.theta); 
-    Fr=Leg_Length_Control_Right_F+20 / arm_cos_f32(Balance_status->Leg_R.theta);
+    Fl=Leg_Length_Control_Left_F + 40 / arm_cos_f32(Balance_status->Leg_L.theta); //前馈支持力
+    Fr=Leg_Length_Control_Right_F + 40 / arm_cos_f32(Balance_status->Leg_R.theta);
 
     Leg_Controller_VMC(Balance_status->Leg_L,Fl,Tpl,&T1l,&T2l);
     Leg_Controller_VMC(Balance_status->Leg_R,Fr,Tpr,&T1r,&T2r);
     Chassis_MotorControl_Leg_init(T1l,T2l,T1r,T2r);
-
 
     Motion_Controller_Yaw_Control_Pid(&YAW_Control_conpensasion_L,&YAW_Control_conpensasion_R,Target_Yaw);
     Tl+=YAW_Control_conpensasion_L;
@@ -566,23 +617,25 @@ void Chassis_ModelControl(void)
 
 void Chassis_Control(void)
 {
-    RC_ctrl_t* rcdata = Get_rc_data();
+    RC_ctrl_t* rc_data=Get_rc_data();
     Balance_data* Balance_data=Get_Balance_Data();
    if(Chassis_Balance_Flag==1)    //已经平衡
 	{
 /*====================变腿长====================*/
-		// if(switch_is_down(rcdata[TEMP].rc.switch_left) && Chassis_Model==3)   //摇杆控制
-		// {
-		// 	// if(rcdata.Remote_ThumbWheel>1024+50)TargetL0+=0.3f*Observer_BalanceStatus.dt;
-		// 	// else if(rcdata.Remote_ThumbWheel<1024-50)TargetL0-=0.3f*Observer_BalanceStatus.dt;    
-		// }
+		if(switch_is_down(rc_data[TEMP].rc.switch_left) && Chassis_Model==3)   //滚轮控制
+		{
+			// if(rcdata[TEMP].rc>1024+50)TargetL0+=0.3f*Balance_data->dt;
+			// else if(rcdata[TEMP].rc<1024-50)TargetL0-=0.3f*Balance_data->dt;    
+            if(rc_data->rc.dial<=-300) TargetL0+=0.005*Balance_data->dt;
+            else if(rc_data->rc.dial>=300) TargetL0-=0.005*Balance_data->dt;
+		}
 /*====================Roll控制====================*/
 	TargetRoll=0;    //暂时不考虑这个功能
 /*====================平移&旋转====================*/
-	TargetdX=rcdata->rc.rocker_l1/660.0f/2 ;  //左竖 控制速度(m/s)		
+	TargetdX=rc_data->rc.rocker_l1/660.0f/2 ;  //左竖 控制速度(m/s)		
     TargetX+=TargetdX*Balance_data->dt;
 
-	Targetdw=rcdata->rc.rocker_r_ /660.0f/2; //右横 控制角速度 
+	Targetdw=rc_data->rc.rocker_r_ /660.0f; //右横 控制角速度 
 	w_Limit=1.5f;
 
 	Target_Yaw-=Targetdw*Balance_data->dt;
@@ -621,11 +674,11 @@ void Chassis_StandFromGround(void)
 
    float Motion_YAW_Control_Left_Dleta_T,Motion_YAW_Control_Right_Dleta_T;
    if(Chassis_YawFlag==0)Motion_Controller_Yaw_Control(Target_Yaw,&Motion_YAW_Control_Left_Dleta_T,&Motion_YAW_Control_Right_Dleta_T,w_Limit);
-	else Motion_Controller_Yaw_Control_Follow(YawTrack_Target,&Motion_YAW_Control_Left_Dleta_T,&Motion_YAW_Control_Right_Dleta_T,w_Limit);
+   else Motion_Controller_Yaw_Control_Follow(YawTrack_Target,&Motion_YAW_Control_Left_Dleta_T,&Motion_YAW_Control_Right_Dleta_T,w_Limit);
 
    //T=LQR_T+偏航角控制T
-	Tl=Tl+Motion_YAW_Control_Left_Dleta_T;
-	Tr=Tr+Motion_YAW_Control_Right_Dleta_T;
+   Tl=Tl+Motion_YAW_Control_Left_Dleta_T;
+   Tr=Tr+Motion_YAW_Control_Right_Dleta_T;
 
 /*====================收腿检测====================*/  
 //调整腿部到初始位置的检测
@@ -704,7 +757,7 @@ void Chassis_ModelTwo(void)
     Balance_data* Balance_status=Get_Balance_Data();
     RC_ctrl_t* rcdata =Get_rc_data();
 /*====================LQR建模====================*/
-	LQR_Clc(&Tl,&Tpl,&Tr,&Tpr,TargetX,0);  
+	LQR_Clc(&Tl,&Tpl,&Tr,&Tpr,TargetX,0,Target_theta);  
 
 /*====================关节力矩====================*/
 //翻滚角补偿->L0 F  
@@ -717,7 +770,7 @@ Motion_Controller_Roll_Control(TargetRoll,&Roll_Compensate_L0_Left,&Roll_Compens
 float Leg_Length_Control_Left_F=0,Leg_Length_Control_Right_F=0;
                //左腿部分
 Left_Leg_Pid.Need_Value=TargetL0+Roll_Compensate_L0_Left;
-float_constrain(Left_Leg_Pid.Need_Value,0.154,0.33); //TODO:待测  腿长限幅 
+float_constrain(Left_Leg_Pid.Need_Value,0.154,0.33); 
 if(Balance_status->Leg_L.Fn<FN_Threshold) Left_Leg_Pid.Need_Value=0.22;//离地状态
                //右腿部分
 Right_Leg_Pid.Need_Value=TargetL0+Roll_Compensate_L0_Right;
