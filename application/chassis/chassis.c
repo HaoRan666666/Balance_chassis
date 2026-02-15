@@ -66,7 +66,7 @@ static RC_ctrl_t *rc_data;              // 遥控器数据,初始化时返回
 float Targetdw; //  目标角速度
 float Tl=0,Tpl=0  ,T1l=0,T2l=0,   Tr=0,Tpr=0,  T1r=0,T2r=0,   Fl=0,Fr=0;
 float Yaw_WheelDelta_T=0;//转向控制所需要叠加在轮子上的力矩差  注意用算出来的总力矩差除以2分配到两个轮子上
-float TargetX,TargetdX,Target_Yaw,TargetL0=0.159,TargetRoll,w_Limit=1.5f,YawTrack_Target,Target_theta=0;
+float TargetX,TargetdX,Target_Yaw=0,TargetL0=0.159,TargetRoll,w_Limit=2.0f,YawTrack_Target,Target_theta=0;
 uint8_t Chassis_Balance_Flag=0;
 uint8_t Chassis_FirstFlag2=1;
 uint8_t Chassis_Model=0;
@@ -220,7 +220,7 @@ void ChassisInit()
 
     CANComm_Init_Config_s comm_conf = {
         .can_config = {
-            .can_handle = &hcan2,
+            .can_handle = &hcan3,
             .tx_id = 0x52,
             .rx_id = 0x51,
         },
@@ -391,7 +391,7 @@ void ChassisTask()
 #ifdef CHASSIS_BOARD
     chassis_cmd_recv = *(Chassis_Ctrl_Cmd_s *)CANCommGet(chasiss_can_comm);
 #endif // CHASSIS_BOARD
-    chassis_cmd_recv.chassis_mode = CHASSIS_NO_FOLLOW; //临时
+    // chassis_cmd_recv.chassis_mode = CHASSIS_NO_FOLLOW; //临时
     Leg_loss_control_detect(); //腿部失控检测函数
     if (chassis_cmd_recv.chassis_mode == CHASSIS_ZERO_FORCE)
     { // 如果出现重要模块离线或遥控器设置为急停,让电机停止
@@ -419,10 +419,10 @@ void ChassisTask()
         chassis_cmd_recv.wz = 0;
         break;
     case CHASSIS_FOLLOW_GIMBAL_YAW: // 跟随云台,不单独设置pid,以误差角度平方为速度输出
-        chassis_cmd_recv.wz = -1.5f * chassis_cmd_recv.offset_angle * abs(chassis_cmd_recv.offset_angle);
+        chassis_cmd_recv.wz = -1.5f / 1000.0f * chassis_cmd_recv.offset_angle * abs(chassis_cmd_recv.offset_angle);
         break;
     case CHASSIS_ROTATE: // 自旋,同时保持全向机动;当前wz维持定值,后续增加不规则的变速策略
-        chassis_cmd_recv.wz = 4000;
+        chassis_cmd_recv.wz = 2;
         break;
     default:
         break;
@@ -430,16 +430,16 @@ void ChassisTask()
     //获取观测数据
     Observer_DataGet();
 
-    TargetdX=rc_data->rc.rocker_l1/660.0f;
+    TargetdX=chassis_cmd_recv.vx;
     TargetX+=TargetdX*Balance_status->dt;
-    Targetdw=rc_data->rc.rocker_r_/660.0f*2;
+    Targetdw=chassis_cmd_recv.wz;//rc_data->rc.rocker_r_/660.0f*2;
     Target_Yaw-=Targetdw*Balance_status->dt;
     if(rc_data->rc.dial<=-100) TargetL0+=0.05*Balance_status->dt;
     else if(rc_data->rc.dial>=100) TargetL0-=0.05*Balance_status->dt;
 
-    float Target_dtheta;
-    Target_dtheta=rc_data->rc.rocker_l1/660.0f;
-    Target_theta-=Target_dtheta*Balance_status->dt;
+    // float Target_dtheta;
+    // Target_dtheta=rc_data->rc.rocker_l1/660.0f;
+    // Target_theta-=Target_dtheta*Balance_status->dt;
 
     //腿长控制->F
     float Leg_Length_Control_Left_F,Leg_Length_Control_Right_F;
@@ -463,12 +463,12 @@ void ChassisTask()
 
     Leg_Controller_VMC(Balance_status->Leg_L,Fl,Tpl,&T1l,&T2l);
     Leg_Controller_VMC(Balance_status->Leg_R,Fr,Tpr,&T1r,&T2r);
-    Chassis_MotorControl_Leg_init(T1l,T2l,T1r,T2r);
+    // Chassis_MotorControl_Leg_init(T1l,T2l,T1r,T2r);
 
     Motion_Controller_Yaw_Control_Pid(&YAW_Control_conpensasion_L,&YAW_Control_conpensasion_R,Target_Yaw);
     Tl+=YAW_Control_conpensasion_L;
     Tr+=YAW_Control_conpensasion_R;
-    Chassis_Wheel_Control(Tl,Tr);
+    // Chassis_Wheel_Control(Tl,Tr);
     }
    
 
@@ -673,7 +673,7 @@ void Chassis_StandFromGround(void)
 /*====================轮向力矩====================*/
 
    float Motion_YAW_Control_Left_Dleta_T,Motion_YAW_Control_Right_Dleta_T;
-   if(Chassis_YawFlag==0)Motion_Controller_Yaw_Control(Target_Yaw,&Motion_YAW_Control_Left_Dleta_T,&Motion_YAW_Control_Right_Dleta_T,w_Limit);
+   if(Chassis_YawFlag==0) Motion_Controller_Yaw_Control_Pid(&YAW_Control_conpensasion_L,&YAW_Control_conpensasion_R,Target_Yaw);
    else Motion_Controller_Yaw_Control_Follow(YawTrack_Target,&Motion_YAW_Control_Left_Dleta_T,&Motion_YAW_Control_Right_Dleta_T,w_Limit);
 
    //T=LQR_T+偏航角控制T
@@ -817,7 +817,7 @@ Leg_Controller_VMC(Balance_status->Leg_R,Fr,Tpr,&T1r,&T2r);
 			Motion_Controller_Yaw_Control(Target_Yaw,&Locomotion_Controller_LeftWheelDeltaT1,&Locomotion_Controller_RightWheelDeltaT1,w_Limit);
 		}
 	#else
-		Motion_Controller_Yaw_Control(Target_Yaw,&Locomotion_Controller_LeftWheelDeltaT1,&Locomotion_Controller_RightWheelDeltaT1,w_Limit);
+		 Motion_Controller_Yaw_Control_Pid(&YAW_Control_conpensasion_L,&YAW_Control_conpensasion_R,Target_Yaw);
 	#endif
     //T=LQR_T+偏航角控制T
 	if(Balance_status->Leg_L.Fn>=FN_Threshold)Tl=Tl+Locomotion_Controller_LeftWheelDeltaT1;

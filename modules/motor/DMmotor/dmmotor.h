@@ -8,7 +8,6 @@
 
 #define DM_MOTOR_CNT 4
 
-// TODO: 根据电机手册修改下面的最小最大值
 #define DM_P_MIN  (-12.56f)
 #define DM_P_MAX  12.56f
 #define DM_V_MIN  (-45.0f)
