@@ -463,12 +463,12 @@ void ChassisTask()
 
     Leg_Controller_VMC(Balance_status->Leg_L,Fl,Tpl,&T1l,&T2l);
     Leg_Controller_VMC(Balance_status->Leg_R,Fr,Tpr,&T1r,&T2r);
-    // Chassis_MotorControl_Leg_init(T1l,T2l,T1r,T2r);
+    Chassis_MotorControl_Leg_init(T1l,T2l,T1r,T2r);
 
     Motion_Controller_Yaw_Control_Pid(&YAW_Control_conpensasion_L,&YAW_Control_conpensasion_R,Target_Yaw);
     Tl+=YAW_Control_conpensasion_L;
     Tr+=YAW_Control_conpensasion_R;
-    // Chassis_Wheel_Control(Tl,Tr);
+    Chassis_Wheel_Control(Tl,Tr);
     }
    
 

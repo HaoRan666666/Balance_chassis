@@ -35,10 +35,10 @@ void Motion_Controller_Init(void)
    Roll_FControllerPID.MaxOut=0;
    Roll_FControllerPID.Need_Value=0;
 
-   Yaw_ControllerPID.Kp=-6;
+   Yaw_ControllerPID.Kp=-12;
    Yaw_ControllerPID.Ki=0;
-   Yaw_ControllerPID.Kd=0;
-   Yaw_ControllerPID.MaxOut=3;
+   Yaw_ControllerPID.Kd=-1.5;
+   Yaw_ControllerPID.MaxOut=10;
    Yaw_ControllerPID.Need_Value=0;
    
 }
