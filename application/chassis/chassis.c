@@ -422,7 +422,7 @@ void ChassisTask()
         chassis_cmd_recv.wz = -1.5f / 1000.0f * chassis_cmd_recv.offset_angle * abs(chassis_cmd_recv.offset_angle);
         break;
     case CHASSIS_ROTATE: // 自旋,同时保持全向机动;当前wz维持定值,后续增加不规则的变速策略
-        chassis_cmd_recv.wz = 2;
+        chassis_cmd_recv.wz = 6;
         break;
     default:
         break;
@@ -434,8 +434,9 @@ void ChassisTask()
     TargetX+=TargetdX*Balance_status->dt;
     Targetdw=chassis_cmd_recv.wz;//rc_data->rc.rocker_r_/660.0f*2;
     Target_Yaw-=Targetdw*Balance_status->dt;
-    if(rc_data->rc.dial<=-100) TargetL0+=0.05*Balance_status->dt;
-    else if(rc_data->rc.dial>=100) TargetL0-=0.05*Balance_status->dt;
+    if(chassis_cmd_recv.Leg_length_flag==1) TargetL0+=0.05*Balance_status->dt;
+    else if(chassis_cmd_recv.Leg_length_flag==2) TargetL0-=0.05*Balance_status->dt;
+
 
     // float Target_dtheta;
     // Target_dtheta=rc_data->rc.rocker_l1/660.0f;
@@ -466,6 +467,8 @@ void ChassisTask()
     Chassis_MotorControl_Leg_init(T1l,T2l,T1r,T2r);
 
     Motion_Controller_Yaw_Control_Pid(&YAW_Control_conpensasion_L,&YAW_Control_conpensasion_R,Target_Yaw);
+    if(Balance_status->Leg_L.Fn<FN_Threshold) YAW_Control_conpensasion_L=0;
+    if(Balance_status->Leg_R.Fn<FN_Threshold) YAW_Control_conpensasion_R=0;
     Tl+=YAW_Control_conpensasion_L;
     Tr+=YAW_Control_conpensasion_R;
     Chassis_Wheel_Control(Tl,Tr);

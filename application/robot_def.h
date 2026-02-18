@@ -144,6 +144,9 @@ typedef struct
     float offset_angle; // 底盘和归中位置的夹角
     chassis_mode_e chassis_mode;
     int chassis_speed_buff;
+
+
+    uint8_t Leg_length_flag;
     // UI部分
     //  ...
 

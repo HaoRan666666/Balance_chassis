@@ -2293,28 +2293,27 @@ void LQR_Clc(float *Tl,float *Tpl,float *Tr,float *Tpr,float target_x,float targ
 		(*Tpl)=K2_l[6]*Balance_status->Leg_L.theta+K2_l[7]*Balance_status->Leg_L.dtheta+K2_l[8]*(Balance_status->body_data.x-target_x)+K2_l[9]*(Balance_status->body_data.dx-target_dx)+K2_l[10]*Balance_status->body_data.Pitch+K2_l[11]*Balance_status->body_data.d_pitch;
 		(*Tpr)=K2_r[6]*Balance_status->Leg_R.theta+K2_r[7]*Balance_status->Leg_R.dtheta+K2_r[8]*(Balance_status->body_data.x-target_x)+K2_r[9]*(Balance_status->body_data.dx-target_dx)+K2_r[10]*Balance_status->body_data.Pitch+K2_r[11]*Balance_status->body_data.d_pitch;
 
-		// if(Balance_status->Leg_L.Fn<FN_Threshold)
-			// {
-			// 	// (*Tl)=0;
-			// 	(*Tpl)=K2_l[6]*Balance_status->Leg_L.theta+K2_l[7]*Balance_status->Leg_L.dtheta;
-			// }
-			// else
-			// {
-			// 	// (*Tl)=K2_l[0]*Balance_status->Leg_L.theta+K2_l[1]*Balance_status->Leg_L.dtheta+K2_l[2]*(Balance_status->body_data.x-target_x)+K2_l[3]*(Balance_status->body_data.dx-target_dx)+K2_l[4]*Balance_status->body_data.Pitch+K2_l[5]*Balance_status->body_data.d_pitch;
-			// 	(*Tpl)=K2_l[6]*Balance_status->Leg_L.theta+K2_l[7]*Balance_status->Leg_L.dtheta+K2_l[8]*(Balance_status->body_data.x-target_x)+K2_l[9]*(Balance_status->body_data.dx-target_dx)+K2_l[10]*Balance_status->body_data.Pitch+K2_l[11]*Balance_status->body_data.d_pitch;
-			// }
-			
-			// if(Balance_status->Leg_R.Fn<FN_Threshold)
-			// {
-			// 	// (*Tr)=0;
-			// 	(*Tpr)=K2_r[6]*Balance_status->Leg_R.theta+K2_r[7]*Balance_status->Leg_R.dtheta;
-			// }
-			// else
-			// {
-
-			// 	// (*Tr)=K2_r[0]*Balance_status->Leg_R.theta+K2_r[1]*Balance_status->Leg_R.dtheta+K2_r[2]*(Balance_status->body_data.x-target_x)+K2_r[3]*(Balance_status->body_data.dx-target_dx)+K2_r[4]*Balance_status->body_data.Pitch+K2_r[5]*Balance_status->body_data.d_pitch;
-			// 	(*Tpr)=K2_r[6]*Balance_status->Leg_R.theta+K2_r[7]*Balance_status->Leg_R.dtheta+K2_r[8]*(Balance_status->body_data.x-target_x)+K2_r[9]*(Balance_status->body_data.dx-target_dx)+K2_r[10]*Balance_status->body_data.Pitch+K2_r[11]*Balance_status->body_data.d_pitch;
-			// }
+	    if(Balance_status->Leg_L.Fn<FN_Threshold)
+		{
+			(*Tl)=0;
+			(*Tpl)=K2_l[6]*Balance_status->Leg_L.theta+K2_l[7]*Balance_status->Leg_L.dtheta;
+		}
+		else
+		{
+			(*Tl)=K2_l[0]*Balance_status->Leg_L.theta+K2_l[1]*Balance_status->Leg_L.dtheta+K2_l[2]*(Balance_status->body_data.x-target_x)+K2_l[3]*(Balance_status->body_data.dx-target_dx)+K2_l[4]*Balance_status->body_data.Pitch+K2_l[5]*Balance_status->body_data.d_pitch;
+			(*Tpl)=K2_l[6]*Balance_status->Leg_L.theta+K2_l[7]*Balance_status->Leg_L.dtheta+K2_l[8]*(Balance_status->body_data.x-target_x)+K2_l[9]*(Balance_status->body_data.dx-target_dx)+K2_l[10]*Balance_status->body_data.Pitch+K2_l[11]*Balance_status->body_data.d_pitch;
+		}
+		
+		if(Balance_status->Leg_R.Fn<FN_Threshold)
+		{
+			(*Tr)=0;
+			(*Tpr)=K2_r[6]*Balance_status->Leg_R.theta+K2_r[7]*Balance_status->Leg_R.dtheta;
+		}
+		else
+		{
+			(*Tr)=K2_r[0]*Balance_status->Leg_R.theta+K2_r[1]*Balance_status->Leg_R.dtheta+K2_r[2]*(Balance_status->body_data.x-target_x)+K2_r[3]*(Balance_status->body_data.dx-target_dx)+K2_r[4]*Balance_status->body_data.Pitch+K2_r[5]*Balance_status->body_data.d_pitch;
+			(*Tpr)=K2_r[6]*Balance_status->Leg_R.theta+K2_r[7]*Balance_status->Leg_R.dtheta+K2_r[8]*(Balance_status->body_data.x-target_x)+K2_r[9]*(Balance_status->body_data.dx-target_dx)+K2_r[10]*Balance_status->body_data.Pitch+K2_r[11]*Balance_status->body_data.d_pitch;
+		}
 			
 
 
