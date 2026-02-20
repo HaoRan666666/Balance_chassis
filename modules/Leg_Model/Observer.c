@@ -69,6 +69,7 @@ void Observer_DataGet(void)
    Balance_status.body_data.d_Roll  = INS.Gyro[1];
    Balance_status.body_data.d_Yaw   = INS.Gyro[2];
 
+   Observer_Init_Body_State_Detect(&Balance_status.body_data);
    /************************************车轮数据******************************/
    float left_reversal_factor = -1.0f;  // 左侧反转
    //左轮
@@ -124,7 +125,7 @@ void Observer_DataGet(void)
 	Balance_status.Leg_L.ddtheta=0.19f*(Balance_status.Leg_L.dtheta-Balance_status.Leg_L.last_dtheta)/Balance_status.dt+0.81f*Balance_status.Leg_L.ddtheta;//一阶低通滤波
 	
 	Observer_GetFN(&Balance_status.Leg_L);
-	
+	Observer_Init_Leg_State_Detect(&Balance_status.Leg_L);
 	//右腿
 	Balance_status.Leg_R.phi_1=dm_motor_instance[3]->measure.position;//右后电机单圈角度     //小连杆与水平线夹角
    //由-pi到pi归化到0-2pi
@@ -165,6 +166,7 @@ void Observer_DataGet(void)
 	Balance_status.Leg_R.test=(Balance_status.Leg_R.dtheta-Balance_status.Leg_R.last_dtheta)/Balance_status.dt;//未滤波加速度 做一个对比 效果显著
 	
    Observer_GetFN(&Balance_status.Leg_R);
+   Observer_Init_Leg_State_Detect(&Balance_status.Leg_R);
 	/************************************机体数据******************************/
 
 	//运动估计
@@ -260,4 +262,49 @@ void Observer_GetFN(Leg_data *Leg)
 	float ddz_w=Balance_status.body_data.a_zE-(Leg->dd_L0)*COS+2.0f*(Leg->d_L0)*(Leg->dtheta)*SIN+(Leg->L0)*(Leg->ddtheta)*SIN+(Leg->L0)*(Leg->dtheta)*(Leg->dtheta)*COS;
 
 	(Leg->Fn)=P+m_w*gravity+m_w*ddz_w;
+}
+
+
+/*
+ *函数简介:初始化时机身状态检测
+ *参数说明:机身数据观测值
+ *返回类型:无
+ *备注:无
+ */
+void Observer_Init_Body_State_Detect(Body_data *body_data)
+{
+   if(fabsf(body_data->Pitch)<0.165f)//机身平
+   {
+       body_data->body_init_state= PITCH_OK;
+   }
+   else//机身不平
+   {
+       body_data->body_init_state= PITCH_NOT_OK;
+   }
+}
+
+/*
+ *函数简介:初始化时腿部状态检测
+ *参数说明:腿部数据观测值
+ *返回类型:无
+ *备注:无
+ */
+void Observer_Init_Leg_State_Detect(Leg_data *Leg)
+{
+   if(Leg->phi_0>PI/2&&Leg->phi_0<=PI) //足端位于第四象限
+   {
+       Leg->leg_init_state= FOOT_Loc_4;
+   }
+   else if(Leg->phi_0>=0&&Leg->phi_0<=PI/2) //足端位于第三象限
+   {
+       Leg->leg_init_state= FOOT_Loc_3;
+   }
+   else if(Leg->phi_0>=-PI&&Leg->phi_0<-PI/2) //足端位于第一象限
+   {
+       Leg->leg_init_state= FOOT_Loc_1;
+   }
+   else if(Leg->phi_0>=-PI/2&&Leg->phi_0<0) //足端位于第二象限
+   {
+       Leg->leg_init_state= FOOT_Loc_2;
+   }
 }

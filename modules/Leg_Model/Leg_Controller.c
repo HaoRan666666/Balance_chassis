@@ -1,11 +1,11 @@
-#include "stm32h7xx.h"                  // Device header
+#include "stm32h7xx.h"                
 #include "arm_math.h"
 #include "Leg_Controller.h"
 #include "controller.h"
 
 PIDInstance Left_Leg_Pid,Right_Leg_Pid; //腿长控制pid结构体
 PIDInstance Leg_omega_ControllerPID_L,Leg_omega_ControllerPID_R; //腿摆角角速度控制pid结构体
-
+PIDInstance Leg_angle_ControllerPID_L,Leg_angle_ControllerPID_R; //腿摆角角度控制pid结构体
 
 /*
  *函数简介:腿长控制VMC
@@ -46,19 +46,37 @@ void Leg_Controller_LegControlInit(void)
 	Right_Leg_Pid.MaxOut=200;
 	Right_Leg_Pid.Need_Value=0.154;
 	
-	Leg_omega_ControllerPID_L.Kp=0;
-	Leg_omega_ControllerPID_L.Ki=0;
+	Leg_omega_ControllerPID_L.Kp=-8;
+	Leg_omega_ControllerPID_L.Ki=-10;
 	Leg_omega_ControllerPID_L.Kd=0;
 	Leg_omega_ControllerPID_L.DeadBand=0;
-	Leg_omega_ControllerPID_L.MaxOut=200;
+	Leg_omega_ControllerPID_L.MaxOut=15;
 	Leg_omega_ControllerPID_L.Need_Value=0;
+	Leg_omega_ControllerPID_L.Improve=PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement;
 
-	Leg_omega_ControllerPID_R.Kp=0;
-	Leg_omega_ControllerPID_R.Ki=0;
+	Leg_omega_ControllerPID_R.Kp=-8;
+	Leg_omega_ControllerPID_R.Ki=-10;
 	Leg_omega_ControllerPID_R.Kd=0;
 	Leg_omega_ControllerPID_R.DeadBand=0;
-	Leg_omega_ControllerPID_R.MaxOut=200;
+	Leg_omega_ControllerPID_R.IntegralLimit=8;
+	Leg_omega_ControllerPID_R.MaxOut=15;
 	Leg_omega_ControllerPID_R.Need_Value=0;
+	Leg_omega_ControllerPID_R.Improve=PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement;
+
+	Leg_angle_ControllerPID_L.Kp=0;
+	Leg_angle_ControllerPID_L.Ki=0;
+	Leg_angle_ControllerPID_L.Kd=0;
+	Leg_angle_ControllerPID_L.DeadBand=0;
+	Leg_angle_ControllerPID_L.MaxOut=5;
+	Leg_angle_ControllerPID_L.Need_Value=0;
+
+
+	Leg_angle_ControllerPID_R.Kp=0;
+	Leg_angle_ControllerPID_R.Ki=0;
+	Leg_angle_ControllerPID_R.Kd=0;
+	Leg_angle_ControllerPID_R.DeadBand=0;
+	Leg_angle_ControllerPID_R.MaxOut=5;
+	Leg_angle_ControllerPID_R.Need_Value=0;
 }
 
 
@@ -70,7 +88,7 @@ void Leg_Controller_LegControlInit(void)
  *返回类型:无
  *备注:无
  */
-void Leg_Controller_LegControl(float *LeftLeg_DeltaF,float *RightLeg_DeltaF)
+void Leg_Controller_Length_Control(float *LeftLeg_DeltaF,float *RightLeg_DeltaF)
 {
    Balance_data *balance_data = Get_Balance_Data();
    (*LeftLeg_DeltaF)=PIDCalculate(&Left_Leg_Pid,balance_data->Leg_L.L0,Left_Leg_Pid.Need_Value);
@@ -114,38 +132,34 @@ void Leg_Controller_InverseKinematicsSolution(float L_0,float phi_0,float *phi_1
 	(*phi_1)=phi1;
 	(*phi_4)=phi4;
 }
-
-
-/*
- *函数简介:腿长控制LQR控制腿长
- *参数说明:腿部状态结构体
- *参数说明:目标五连杆phi1
- *参数说明:目标五连杆phi4
- *参数说明:髋关节1转矩T1
- *参数说明:髋关节2转矩T2
- *返回类型:无
- *备注:无
- */
-// void Leg_Controller_LengthLQR(Leg_data Leg,float target_phi1,float target_phi4,float *T1,float *T2)
-// {
-// 	#define Leg_Controller_LQR_FeedForward	0
-// 	#define Leg_Controller_LQR_K1			0
-// 	#define Leg_Controller_LQR_K2			0
-	
-// 	(*T1)=-Leg_Controller_LQR_FeedForward-Leg_Controller_LQR_K1*(Leg.phi_1-target_phi1)-Leg_Controller_LQR_K2*Leg.dphi_1;
-// 	(*T2)=Leg_Controller_LQR_FeedForward-Leg_Controller_LQR_K1*(Leg.phi_4-target_phi4)-Leg_Controller_LQR_K2*Leg.dphi_4;
-// }
-
-
 /*
  *函数简介:腿部摆角角速度控制
- *参数说明:腿部状态结构体
- *参数说明:目标角速度
+ *参数说明:左腿ΔTp
+ *参数说明:右腿ΔTp
  *返回类型:无
  *备注:无
  */
-void Leg_Controller_AngularVelocity(Leg_data* Leg,PIDInstance* pid_instance,float *Delta_Tp,float Target_w)
+void Leg_Controller_AngularVelocity(float *LeftLeg_DeltaTp,float *RightLeg_DeltaTp)
 {
-   float current_w=Leg->dtheta; //腿摆角角速度
-   *Delta_Tp=PIDCalculate(pid_instance,current_w,Target_w);
+   Balance_data *balance_data = Get_Balance_Data();
+   *LeftLeg_DeltaTp=PIDCalculate(&Leg_omega_ControllerPID_L,balance_data->Leg_L.dtheta,Leg_omega_ControllerPID_L.Need_Value);
+   *RightLeg_DeltaTp=PIDCalculate(&Leg_omega_ControllerPID_R,balance_data->Leg_R.dtheta,Leg_omega_ControllerPID_R.Need_Value);
+}
+
+/*
+ *函数简介:腿部摆角角度控制	
+ *参数说明:左腿ΔTp
+ *参数说明:右腿ΔTp
+ *返回类型:无
+ *备注:无
+ */
+void Leg_Controller_AngularPosition(float *LeftLeg_DeltaTp,float *RightLeg_DeltaTp)
+{
+   Balance_data *balance_data = Get_Balance_Data();
+   float Target_omega_L=PIDCalculate(&Leg_angle_ControllerPID_L,balance_data->Leg_L.theta,Leg_angle_ControllerPID_L.Need_Value);
+   float Target_omega_R=PIDCalculate(&Leg_angle_ControllerPID_R,balance_data->Leg_R.theta,Leg_angle_ControllerPID_R.Need_Value);
+
+   Leg_omega_ControllerPID_L.Need_Value=Target_omega_L;
+   Leg_omega_ControllerPID_R.Need_Value=Target_omega_R;
+   Leg_Controller_AngularVelocity(LeftLeg_DeltaTp,RightLeg_DeltaTp);
 }

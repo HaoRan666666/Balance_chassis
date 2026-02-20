@@ -21,6 +21,27 @@
 #define l_4													0.210f  
 #define l_5													0
 
+typedef enum 
+{
+   PITCH_OK,  //机身平
+   PITCH_NOT_OK
+}Body_Init_state; //初始化时的阶段
+
+typedef enum 
+{
+   FOOT_Loc_1,   //足端位于第一象限
+   FOOT_Loc_2,   //足端位于第二象限
+   FOOT_Loc_3,    //足端位于第三象限
+   FOOT_Loc_4     //足端位于第四象限
+}Leg_Init_state; //初始化时的阶段
+
+typedef enum 
+{
+   INIT_STAGE_1, 
+   INIT_STAGE_2, 
+   INIT_STAGE_3,    
+   INIT_STAGE_4     
+}Init_stage; //初始化时的阶段
 
 typedef struct 
 { 
@@ -125,6 +146,8 @@ typedef struct
 	float T2;					//髋关节2的转矩T2(N·m)  大腿电机
 
    float test;
+
+   Leg_Init_state leg_init_state; //初始化时的阶段
 }Leg_data;
 
 typedef struct  
@@ -151,6 +174,8 @@ typedef struct
   float z_b_ddot;
 
   	MotionEstimation_Balance MotionEstimation;	//运动估计结构体
+
+   Body_Init_state body_init_state;
 }Body_data;
 
 typedef struct  
@@ -163,12 +188,17 @@ typedef struct
 
    Leg_data Leg_R;   //右腿数据
    Leg_data Leg_L;   //左腿数据
+
+   Init_stage init_stage; //初始化时的阶段
 }Balance_data;//轮腿各部分的数据
 
 void Observer_init(void);
 void Observer_DataGet(void);
 void Observer_LegForwardKinematicsSolution(Leg_data *Leg);
 void Observer_GetFN(Leg_data *Leg);
+void Observer_Init_Body_State_Detect(Body_data *body_data);
+void Observer_Init_Leg_State_Detect(Leg_data *Leg);
+
 Balance_data*  Get_Balance_Data();
 
 #endif 
