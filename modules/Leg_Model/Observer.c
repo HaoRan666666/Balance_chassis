@@ -118,12 +118,15 @@ void Observer_DataGet(void)
 	
 	Balance_status.Leg_L.T1=-dm_motor_instance[2]->measure.torque;   //小连杆电机扭矩    逆时针为正   //需要归化到0-2pi
 	Balance_status.Leg_L.T2=-dm_motor_instance[0]->measure.torque;   //大腿电机扭矩      逆时针为正
-	
-	Balance_status.Leg_L.theta=PI/2.0f-(Balance_status.Leg_L.phi_0+Balance_status.body_data.Pitch);  
+
+   Balance_status.Leg_L.last_theta=Balance_status.Leg_L.theta;
+	Balance_status.Leg_L.theta=PI/2.0f-(Balance_status.Leg_L.phi_0+Balance_status.body_data.Pitch);
 	Balance_status.Leg_L.last_dtheta=Balance_status.Leg_L.dtheta;
 	Balance_status.Leg_L.dtheta=-(Balance_status.Leg_L.dphi_0+Balance_status.body_data.d_pitch);     //顺时针为正
 	Balance_status.Leg_L.ddtheta=0.19f*(Balance_status.Leg_L.dtheta-Balance_status.Leg_L.last_dtheta)/Balance_status.dt+0.81f*Balance_status.Leg_L.ddtheta;//一阶低通滤波
-	
+	Balance_status.Leg_L.test=(Balance_status.Leg_L.theta-Balance_status.Leg_L.last_theta)/Balance_status.dt;
+
+
 	Observer_GetFN(&Balance_status.Leg_L);
 	Observer_Init_Leg_State_Detect(&Balance_status.Leg_L);
 	//右腿
@@ -158,12 +161,15 @@ void Observer_DataGet(void)
 	Balance_status.Leg_R.T1=dm_motor_instance[3]->measure.torque;   //小连杆电机扭矩    逆时针为正
 	Balance_status.Leg_R.T2=dm_motor_instance[1]->measure.torque;   //大腿电机扭矩      逆时针为正
 	
+   Balance_status.Leg_R.last_theta=Balance_status.Leg_R.theta;
 	Balance_status.Leg_R.theta=PI/2.0f-(Balance_status.Leg_R.phi_0+Balance_status.body_data.Pitch);  
 	Balance_status.Leg_R.last_dtheta=Balance_status.Leg_R.dtheta;
 	Balance_status.Leg_R.dtheta=-(Balance_status.Leg_R.dphi_0+Balance_status.body_data.d_pitch);     //顺时针为正
+   Balance_status.Leg_R.test=(Balance_status.Leg_R.theta-Balance_status.Leg_R.last_theta)/Balance_status.dt;
+
 
 	Balance_status.Leg_R.ddtheta=0.19f*(Balance_status.Leg_R.dtheta-Balance_status.Leg_R.last_dtheta)/Balance_status.dt+0.81f*Balance_status.Leg_R.ddtheta;//一阶低通滤波
-	Balance_status.Leg_R.test=(Balance_status.Leg_R.dtheta-Balance_status.Leg_R.last_dtheta)/Balance_status.dt;//未滤波加速度 做一个对比 效果显著
+
 	
    Observer_GetFN(&Balance_status.Leg_R);
    Observer_Init_Leg_State_Detect(&Balance_status.Leg_R);

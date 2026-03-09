@@ -34,17 +34,17 @@ void Leg_Controller_LegControlInit(void)
 {
     Left_Leg_Pid.Kp=1200;
 	Left_Leg_Pid.Ki=0;
-	Left_Leg_Pid.Kd=0;
+	Left_Leg_Pid.Kd=30;
 	Left_Leg_Pid.DeadBand=0;
 	Left_Leg_Pid.MaxOut=200;
-	Left_Leg_Pid.Need_Value=0.154;
+	Left_Leg_Pid.Need_Value=0.15;
 
 	Right_Leg_Pid.Kp=1200;
 	Right_Leg_Pid.Ki=0;
-	Right_Leg_Pid.Kd=0;
+	Right_Leg_Pid.Kd=30;
 	Right_Leg_Pid.DeadBand=0;
 	Right_Leg_Pid.MaxOut=200;
-	Right_Leg_Pid.Need_Value=0.154;
+	Right_Leg_Pid.Need_Value=0.15;
 	
 	Leg_omega_ControllerPID_L.Kp=-8;
 	Leg_omega_ControllerPID_L.Ki=-10;
@@ -63,20 +63,24 @@ void Leg_Controller_LegControlInit(void)
 	Leg_omega_ControllerPID_R.Need_Value=0;
 	Leg_omega_ControllerPID_R.Improve=PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement;
 
-	Leg_angle_ControllerPID_L.Kp=0;
-	Leg_angle_ControllerPID_L.Ki=0;
+	Leg_angle_ControllerPID_L.Kp=5;
+	Leg_angle_ControllerPID_L.Ki=1;
 	Leg_angle_ControllerPID_L.Kd=0;
 	Leg_angle_ControllerPID_L.DeadBand=0;
-	Leg_angle_ControllerPID_L.MaxOut=5;
+	Leg_angle_ControllerPID_L.IntegralLimit=4;
+	Leg_angle_ControllerPID_L.MaxOut=6;
 	Leg_angle_ControllerPID_L.Need_Value=0;
+	Leg_angle_ControllerPID_L.Improve=PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement;
 
 
-	Leg_angle_ControllerPID_R.Kp=0;
-	Leg_angle_ControllerPID_R.Ki=0;
+	Leg_angle_ControllerPID_R.Kp=5;
+	Leg_angle_ControllerPID_R.Ki=1;
 	Leg_angle_ControllerPID_R.Kd=0;
 	Leg_angle_ControllerPID_R.DeadBand=0;
-	Leg_angle_ControllerPID_R.MaxOut=5;
+	Leg_angle_ControllerPID_R.IntegralLimit=4;
+	Leg_angle_ControllerPID_R.MaxOut=6;
 	Leg_angle_ControllerPID_R.Need_Value=0;
+	Leg_angle_ControllerPID_R.Improve=PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement;
 }
 
 

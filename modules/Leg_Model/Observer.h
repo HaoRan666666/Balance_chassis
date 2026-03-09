@@ -115,6 +115,7 @@ typedef struct
    float ddphi_0;    
 
    float theta;				//摆杆摆角theta(rad)
+   float last_theta;			//上一次摆杆摆角last_theta(rad)
 	float last_dtheta;			//上一次摆杆摆角角速度last_theta(rad/s) 
 	float dtheta;				//摆杆摆角角速度dtheta(rad/s)                                  //顺时针为正
 	double ddtheta;				//摆杆摆角角加速度ddtheta(rad/s^2)
