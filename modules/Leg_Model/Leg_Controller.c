@@ -65,7 +65,7 @@ void Leg_Controller_LegControlInit(void)
 
 	Leg_angle_ControllerPID_L.Kp=5;
 	Leg_angle_ControllerPID_L.Ki=1;
-	Leg_angle_ControllerPID_L.Kd=0;
+	Leg_angle_ControllerPID_L.Kd=0.2;
 	Leg_angle_ControllerPID_L.DeadBand=0;
 	Leg_angle_ControllerPID_L.IntegralLimit=4;
 	Leg_angle_ControllerPID_L.MaxOut=6;
@@ -75,7 +75,7 @@ void Leg_Controller_LegControlInit(void)
 
 	Leg_angle_ControllerPID_R.Kp=5;
 	Leg_angle_ControllerPID_R.Ki=1;
-	Leg_angle_ControllerPID_R.Kd=0;
+	Leg_angle_ControllerPID_R.Kd=0.2;
 	Leg_angle_ControllerPID_R.DeadBand=0;
 	Leg_angle_ControllerPID_R.IntegralLimit=4;
 	Leg_angle_ControllerPID_R.MaxOut=6;

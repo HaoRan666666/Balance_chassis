@@ -112,7 +112,7 @@ uint8_t leg_init_angle_1_flag_L=0;
 float G_compensation_R=0;
 float G_compensation_L=0;
 
-uint8_t LQR_mode_flag=1; //LQR模式标志位
+uint8_t LQR_mode_flag=0; //LQR模式标志位
 
 uint8_t Leg_length_init_flag=0;
 
@@ -502,13 +502,15 @@ void Balance_Init_state_Detect(void)
             Leg_angle_ControllerPID_L.Need_Value=0.227;
             Leg_angle_ControllerPID_R.Need_Value=0.227;
             //检测两腿是否都垂直
-            if((fabs(balance_status->Leg_L.theta-0.227)<=0.005)&&
-               (fabs(balance_status->Leg_R.theta-0.227)<=0.005)&&fabs(balance_status->body_data.d_pitch)<0.01&&balance_status->body_data.Pitch<0)
+            if((fabs(balance_status->Leg_L.theta-0.227)<=0.2)&&
+               (fabs(balance_status->Leg_R.theta-0.227)<=0.2)&&fabs(balance_status->body_data.d_pitch)<0.01&&balance_status->body_data.Pitch<0)
             {
             //更新标志位，进入LQR模式
             LQR_mode_flag=1;
             // LQR_Clc(&Tl,&Tpl,&Tr,&Tpr,TargetX,TargetdX,Target_theta);
             balance_status->body_data.x=0;//清零位移项（初始化bug原因）
+            TargetL0_L=0.17;
+            TargetL0_R=0.17;
             }
           }
           else
@@ -522,7 +524,7 @@ void Balance_Init_state_Detect(void)
         }
         else
         {
-          G_compensation_R=-4*arm_cos_f32(balance_status->Leg_R.phi_0);
+          G_compensation_R=-2*arm_cos_f32(balance_status->Leg_R.phi_0);
           G_compensation_L=-2*arm_cos_f32(balance_status->Leg_L.phi_0);
           Leg_Controller_AngularVelocity(&Leg_omega_Control_conpensation_L,&Leg_omega_Control_conpensation_R);//其他所有阶段都使用速度控制
         }
@@ -654,7 +656,7 @@ void ChassisTask()
             Fr=Leg_Length_Control_Right_F;
             Leg_Controller_VMC(Balance_status->Leg_L,Fl,Tpl,&T1l,&T2l);
             Leg_Controller_VMC(Balance_status->Leg_R,Fr,Tpr,&T1r,&T2r);
-            // Chassis_MotorControl_Leg_init(T1l,T2l,T1r,T2r);
+            Chassis_MotorControl_Leg_init(T1l,T2l,T1r,T2r);
         }
         else
         {
