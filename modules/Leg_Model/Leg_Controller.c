@@ -33,19 +33,23 @@ void Leg_Controller_VMC(Leg_data Leg,float F,float Tp,float *T1,float *T2)
 void Leg_Controller_LegControlInit(void)
 {
     Left_Leg_Pid.Kp=1200;
-	Left_Leg_Pid.Ki=0;
+	Left_Leg_Pid.Ki=50;
 	Left_Leg_Pid.Kd=30;
 	Left_Leg_Pid.DeadBand=0;
+	Left_Leg_Pid.IntegralLimit=100;
 	Left_Leg_Pid.MaxOut=200;
 	Left_Leg_Pid.Need_Value=0.15;
+	Left_Leg_Pid.Improve=PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement;
 
 	Right_Leg_Pid.Kp=1200;
-	Right_Leg_Pid.Ki=0;
+	Right_Leg_Pid.Ki=50;
 	Right_Leg_Pid.Kd=30;
 	Right_Leg_Pid.DeadBand=0;
+	Right_Leg_Pid.IntegralLimit=100;
 	Right_Leg_Pid.MaxOut=200;
 	Right_Leg_Pid.Need_Value=0.15;
-	
+	Right_Leg_Pid.Improve=PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement;
+
 	Leg_omega_ControllerPID_L.Kp=-8;
 	Leg_omega_ControllerPID_L.Ki=-10;
 	Leg_omega_ControllerPID_L.Kd=0;

@@ -147,6 +147,7 @@ typedef struct
 
 
     uint8_t Leg_length_flag;
+    uint8_t STJ_command_flag;
     // UI部分
     //  ...
 
