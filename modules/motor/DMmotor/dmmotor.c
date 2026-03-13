@@ -71,6 +71,11 @@ static void DMMotorDecode(CANInstance *motor_can)
     DaemonReload(motor->motor_daemon);
 
     measure->state= (rxbuff[0]&0xF0)>>4;
+    // if(measure->state==0)
+    // {
+    //   DMMotorSetMode(DM_CMD_MOTOR_MODE, motor); 
+    //   // 解决上电顺序导致的电机不使能问题
+    // }
     measure->last_position = measure->position;
     tmp = (uint16_t)((rxbuff[1] << 8) | rxbuff[2]);
     measure->position = uint_to_float(tmp, DM_P_MIN, DM_P_MAX, 16);
@@ -125,7 +130,7 @@ DMMotorInstance *DMMotorInit(Motor_Init_Config_s *config,DMMotor_WorkMode_e mode
     DMMotorSetMode(DM_CMD_CLEAR_ERROR, motor);
     DWT_Delay(0.05);
 
-    DMMotorSetMode(DM_CMD_MOTOR_MODE, motor);       //使能
+    DMMotorSetMode(DM_CMD_MOTOR_MODE, motor);      //使能
     // DMMotorCaliEncoder(motor); //设置零点
     DWT_Delay(0.05);
     dm_motor_instance[idx++] = motor;
@@ -414,3 +419,4 @@ void DMMotorControlInit()
         dm_task_handle[i] = osThreadCreate(osThread(dm_task_name), dm_motor_instance[i]);
     }
 }
+

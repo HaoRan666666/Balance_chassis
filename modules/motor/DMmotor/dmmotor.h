@@ -94,7 +94,7 @@ typedef enum
     DM_CMD_MOTOR_MODE = 0xfc,   // 使能,会响应指令
     DM_CMD_RESET_MODE = 0xfd,   // 停止
     DM_CMD_ZERO_POSITION = 0xfe, // 将当前的位置设置为编码器零位
-    DM_CMD_CLEAR_ERROR = 0xfb // 清除电机过热错误
+    DM_CMD_CLEAR_ERROR = 0x09 // 清除电机过热错误
 }DMMotor_Mode_e;
 
 

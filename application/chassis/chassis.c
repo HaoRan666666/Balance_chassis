@@ -36,7 +36,8 @@
 //各种阈值
 #define PHI_TARGET_1 (0.05)
 #define PHI_ERR_TH (PI/90.0f)   
-#define CLIMB_STEP_PITCH_THRESHOLD -(PI/180*5) // -5度 
+#define CLIMB_STEP_PITCH_THRESHOLD -(PI/180*2) // -3度 
+#define SAVE_SELF_PITCH_THRESHOLD (PI/180*20) // 20度
 /* 底盘应用包含的模块和信息存储,底盘是单例模式,因此不需要为底盘建立单独的结构体 */
 #ifdef CHASSIS_BOARD // 如果是底盘板,使用板载IMU获取底盘转动角速度
 #include "can_comm.h"
@@ -300,13 +301,38 @@ void Climb_step_control(void)
    Balance_data *balance_status=Get_Balance_Data();
 //    TargetL0_L=0.25;
 //    TargetL0_R=0.25;
-//    if(balance_status->body_data.Pitch<=CLIMB_STEP_PITCH_THRESHOLD)
-//    {
+   if(balance_status->body_data.Pitch<=CLIMB_STEP_PITCH_THRESHOLD)
+   {
        //执行上台阶动作
        LQR_mode_flag=0;
        leg_init_angle_1_flag_L=0;
        leg_init_angle_1_flag_R=0;
-//    }
+   }
+}
+
+/**
+ * @brief 翻倒自救
+ *
+ */
+void Save_self_control(void)
+{
+    Balance_data *balance_status=Get_Balance_Data();
+    //检测Pitch是否平行与地面，如果平行则进入下一阶段自起环节
+    if(fabs(balance_status->body_data.Pitch)<=0.05&&fabs(balance_status->body_data.d_pitch)<=0.05)//TODO:阈值有待调整
+    {
+
+        //进入下一阶段自起环节
+    }
+    else 
+    {
+
+        Leg_angle_ControllerPID_L.Need_Value+=0.1;// 方向和速度有待调整 ，以及过圈处理
+        Leg_angle_ControllerPID_R.Need_Value+=0.1;
+
+    }
+
+    //使用位置控制
+    Leg_Controller_AngularPosition(&Leg_Angle_Control_conpensation_L,&Leg_Angle_Control_conpensation_R);
 }
 
 /**
@@ -320,6 +346,7 @@ void Chassis_Reset(void)
     balance_status->body_data.MotionEstimation.x=0;
     balance_status->body_data.MotionEstimation.x_nofilter=0;
 
+    balance_status->body_data.x=0;
     //各个目标值重置
     Target_Yaw=balance_status->body_data.Yaw;
     TargetRoll=0;
@@ -333,8 +360,24 @@ void Chassis_Reset(void)
     leg_init_angle_1_flag_L=0;
     leg_init_angle_1_flag_R=0;
     LQR_mode_flag=0;
-
-    chassis_cmd_recv.chassis_mode = CHASSIS_NO_FOLLOW;
+    
+    //清除欠压错误
+    if(motor_lb->measure.state==0x09)
+    {
+        DMMotorSetMode(DM_CMD_CLEAR_ERROR, motor_lb);
+    }
+    if(motor_lf->measure.state==0x09)
+    {
+        DMMotorSetMode(DM_CMD_CLEAR_ERROR, motor_lf);
+    }
+    if(motor_rf->measure.state==0x09)
+    {
+        DMMotorSetMode(DM_CMD_CLEAR_ERROR, motor_rf);
+    }
+    if(motor_rb->measure.state==0x09)
+    {
+        DMMotorSetMode(DM_CMD_CLEAR_ERROR, motor_rb);
+    }
 
 }
 
@@ -355,12 +398,12 @@ static void Leg_loss_control_detect(void)
 {
     Balance_data *balance_status=Get_Balance_Data();
 
-    if(fabs(balance_status->body_data.x-TargetX)>1)
+    if(fabs(balance_status->body_data.x-TargetX)>=1)
     {
         X_loss_flag=1;
     }
 
-    if(fabs(balance_status->body_data.Pitch-0)>0.4)
+    if(fabs(balance_status->body_data.Pitch-0)>=0.4)
     {
         Pitch_loss_flag=1;
     }
@@ -406,7 +449,7 @@ void Balance_Init_state_Detect(void)
         else if(balance_status->Leg_L.leg_init_state==FOOT_Loc_3&&(leg_init_angle_1_flag_L==0||leg_init_angle_1_flag_R==0))
         {
             //控制腿部摆角逆时针旋转，直到临界值
-            if(fabs(balance_status->Leg_L.phi_0-PHI_TARGET_1)<0.01)//TODO：临界值和阈值有待调整
+            if(fabs(balance_status->Leg_L.phi_0-PHI_TARGET_1)<=0.01)
             {
             //停止旋转,更新标志位
             Leg_omega_ControllerPID_L.Need_Value=0;
@@ -473,7 +516,7 @@ void Balance_Init_state_Detect(void)
         else if(balance_status->Leg_R.leg_init_state==FOOT_Loc_3&&(leg_init_angle_1_flag_L==0||leg_init_angle_1_flag_R==0))
         {
             //控制腿部摆角逆时针旋转，直到临界值
-            if(fabs(balance_status->Leg_R.phi_0-PHI_TARGET_1)<0.01)
+            if(fabs(balance_status->Leg_R.phi_0-PHI_TARGET_1)<=0.01)
             {
             //停止旋转
             Leg_omega_ControllerPID_R.Need_Value=0;
@@ -592,6 +635,7 @@ void ChassisTask()
     chassis_cmd_recv = *(Chassis_Ctrl_Cmd_s *)CANCommGet(chasiss_can_comm);
 #endif // CHASSIS_BOARD
     // Leg_loss_control_detect(); //腿部失控检测函数
+    // chassis_cmd_recv.chassis_mode = CHASSIS_NO_FOLLOW;
     if (chassis_cmd_recv.chassis_mode == CHASSIS_ZERO_FORCE)
     { // 如果出现重要模块离线或遥控器设置为急停,让电机停止
         DMMotorStop(motor_lf);
@@ -708,72 +752,7 @@ void ChassisTask()
             Chassis_Wheel_Control(Tl,Tr);
         }
 
-    // // 进行LQR计算
-    // // LQR_Clc(&Tl,&Tpl,&Tr,&Tpr,TargetX,TargetdX,Target_theta);
-
-    // Fl=Leg_Length_Control_Left_F ;//+ 40 / arm_cos_f32(Balance_status->Leg_L.theta); //前馈支持力
-    // Fr=Leg_Length_Control_Right_F ;//+ 40 / arm_cos_f32(Balance_status->Leg_R.theta);
-
-    // if(Balance_status->Leg_L.Fn<FN_Threshold) Fl=Leg_Length_Control_Left_F;
-    // if(Balance_status->Leg_R.Fn<FN_Threshold) Fr=Leg_Length_Control_Right_F;
-
-    
-    // Balance_Init_state_Detect();
-
-    // if(leg_init_angle_1_flag_L==1&&leg_init_angle_1_flag_R==1)
-    // {
-    // Tpl=Leg_Angle_Control_conpensation_L;
-    // Tpr=Leg_Angle_Control_conpensation_R;
-    // }
-    // else
-    // {
-    // Tpl=Leg_omega_Control_conpensation_L+G_compensation_L;
-    // Tpr=Leg_omega_Control_conpensation_R+G_compensation_R;
-    // } 
-    // Leg_Controller_VMC(Balance_status->Leg_L,Fl,Tpl,&T1l,&T2l);
-    // Leg_Controller_VMC(Balance_status->Leg_R,Fr,Tpr,&T1r,&T2r);
-    // Chassis_MotorControl_Leg_init(T1l,T2l,T1r,T2r);
-
-    // Motion_Controller_Yaw_Control_Pid(&YAW_Control_conpensasion_L,&YAW_Control_conpensasion_R,Target_Yaw);
-    // if(Balance_status->Leg_L.Fn<FN_Threshold) YAW_Control_conpensasion_L=0;
-    // if(Balance_status->Leg_R.Fn<FN_Threshold) YAW_Control_conpensasion_R=0;
-    // Tl+=YAW_Control_conpensasion_L;
-    // Tr+=YAW_Control_conpensasion_R;
-    // Chassis_Wheel_Control(Tl,Tr);
     }
-   
-
-    // Leg_init_detect();
-    // if(Leg_init_flag)
-    // {     
-    // LQR_Clc(&Tl,&Tpl,&Tr,&Tpr,TargetX,TargetdX);
-    // Motion_Controller_Yaw_Control_Pid(&YAW_Control_conpensasion_L,&YAW_Control_conpensasion_R);
-    // Tl+=YAW_Control_conpensasion_L;
-    // Tr+=YAW_Control_conpensasion_R;
-
-    // // Chassis_Wheel_Control(Tl,Tr);
-    // }
-    
-    // Tl+=YAW_Control_conpensasion_L;
-    // Tr+=YAW_Control_conpensasion_R;
-
-    // Chassis_Wheel_Control(Tl,Tr);
-
-    //速度环控制  轮半径60mm  向前的速度转化为度/秒  电机转速=线速度/轮子半径
-    // DJIMotorSetRef(motor_left,chassis_cmd_recv.vx/Wheel_R + chassis_cmd_recv.wz * Body_Rl);// m/s 正负号待定
-    // DJIMotorSetRef(motor_right,chassis_cmd_recv.vx/Wheel_R - chassis_cmd_recv.wz * Body_Rl);
-    
-    // test_speed_left=rc_data->rc.rocker_l1;
-    // test_speed_right=rc_data->rc.rocker_l1;
-    // DJIMotorSetRef(motor_left,-test_speed_left*10);// m/s 正负号待定
-    // DJIMotorSetRef(motor_right,-test_speed_right*10);// m/s 正负号待定
-    // 根据控制模式进行正运动学解算,计算底盘输出
-
-    // test_motor_t_lf=rc_data->rc.rocker_l1/660.0f*10;
-    // test_motor_t_rf=rc_data->rc.rocker_r1/660.0f*10;
-
-    // Chassis_Control();
-
     // 根据裁判系统的反馈数据和电容数据对输出限幅并设定闭环参考值
     // LimitChassisOutput();
 
