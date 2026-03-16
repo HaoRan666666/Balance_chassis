@@ -23,9 +23,10 @@
 
 typedef enum 
 {
-   PITCH_OK,  //机身平
-   PITCH_NOT_OK
-}Body_Init_state; //初始化时的阶段
+   PITCH_Flat,  //机身平
+   PITCH_Up,    //机头朝上
+   PITCH_Down   //机头朝下
+}Pitch_Init_state; //初始化时的阶段
 
 typedef enum 
 {
@@ -33,7 +34,7 @@ typedef enum
    FOOT_Loc_2,   //足端位于第二象限
    FOOT_Loc_3,    //足端位于第三象限
    FOOT_Loc_4     //足端位于第四象限
-}Leg_Init_state; //初始化时的阶段
+}Leg_state; //初始化时的阶段
 
 typedef enum 
 {
@@ -148,7 +149,8 @@ typedef struct
 
    float test;
 
-   Leg_Init_state leg_init_state; //初始化时的阶段
+   Leg_state leg_init_state; //初始化时的阶段
+   uint8_t init_flag;
 }Leg_data;
 
 typedef struct  
@@ -176,7 +178,8 @@ typedef struct
 
   	MotionEstimation_Balance MotionEstimation;	//运动估计结构体
 
-   Body_Init_state body_init_state;
+   Pitch_Init_state Pitch_init_state;
+   uint8_t init_flag;
 }Body_data;
 
 typedef struct  

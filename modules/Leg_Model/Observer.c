@@ -69,7 +69,7 @@ void Observer_DataGet(void)
    Balance_status.body_data.d_Roll  = INS.Gyro[1];
    Balance_status.body_data.d_Yaw   = INS.Gyro[2];
 
-   Observer_Init_Body_State_Detect(&Balance_status.body_data);
+   // Observer_Init_Body_State_Detect(&Balance_status.body_data);
    /************************************车轮数据******************************/
    float left_reversal_factor = -1.0f;  // 左侧反转
    //左轮
@@ -276,17 +276,25 @@ void Observer_GetFN(Leg_data *Leg)
  *参数说明:机身数据观测值
  *返回类型:无
  *备注:无
+ 
  */
 void Observer_Init_Body_State_Detect(Body_data *body_data)
 {
-   if(fabsf(body_data->Pitch)<0.165f)//机身平
+   if(body_data->init_flag) return; //如果已经读取过一次数据了，就不再进行初始化状态检测了
+   if(fabsf(body_data->Pitch)<0.1)//机身平
    {
-       body_data->body_init_state= PITCH_OK;
+       body_data->Pitch_init_state= PITCH_Flat;
    }
-   else//机身不平
+   else//机身不平,分为两种情况，pitch朝上还是朝下
    {
-       body_data->body_init_state= PITCH_NOT_OK;
+      //判断pitch朝上还是朝下
+      if(body_data->Pitch>=-PI&&body_data->Pitch<=-PI/2.0f) //pitch朝下
+      body_data->Pitch_init_state= PITCH_Down;
+      else if(body_data->Pitch>PI/2.0f&&body_data->Pitch<PI) //pitch朝上
+      body_data->Pitch_init_state= PITCH_Up;
    }
+
+   body_data->init_flag=1; //标志位，已经读取过一次数据了，后续不再进行初始化状态检测了
 }
 
 /*
@@ -297,6 +305,9 @@ void Observer_Init_Body_State_Detect(Body_data *body_data)
  */
 void Observer_Init_Leg_State_Detect(Leg_data *Leg)
 {
+   if(Leg->init_flag) return; //如果已经读取过一次数据了，就不再进行初始化状态检测了 
+
+
    if(Leg->phi_0>PI/2&&Leg->phi_0<=PI) //足端位于第四象限
    {
        Leg->leg_init_state= FOOT_Loc_4;
@@ -313,4 +324,6 @@ void Observer_Init_Leg_State_Detect(Leg_data *Leg)
    {
        Leg->leg_init_state= FOOT_Loc_2;
    }
+
+   Leg->init_flag=1; //标志位，已经读取过一次数据了，后续不再进行初始化状态检测了
 }

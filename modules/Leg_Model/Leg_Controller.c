@@ -6,7 +6,7 @@
 PIDInstance Left_Leg_Pid,Right_Leg_Pid; //腿长控制pid结构体
 PIDInstance Leg_omega_ControllerPID_L,Leg_omega_ControllerPID_R; //腿摆角角速度控制pid结构体
 PIDInstance Leg_angle_ControllerPID_L,Leg_angle_ControllerPID_R; //腿摆角角度控制pid结构体
-
+PIDInstance Leg_phi0_controllerPID_L,Leg_phi0_controllerPID_R; //腿摆角phi0控制pid结构体
 /*
  *函数简介:腿长控制VMC
  *参数说明:腿部状态结构体
@@ -72,7 +72,7 @@ void Leg_Controller_LegControlInit(void)
 	Leg_angle_ControllerPID_L.Kd=0.2;
 	Leg_angle_ControllerPID_L.DeadBand=0;
 	Leg_angle_ControllerPID_L.IntegralLimit=4;
-	Leg_angle_ControllerPID_L.MaxOut=6;
+	Leg_angle_ControllerPID_L.MaxOut=100;
 	Leg_angle_ControllerPID_L.Need_Value=0;
 	Leg_angle_ControllerPID_L.Improve=PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement;
 
@@ -82,9 +82,28 @@ void Leg_Controller_LegControlInit(void)
 	Leg_angle_ControllerPID_R.Kd=0.2;
 	Leg_angle_ControllerPID_R.DeadBand=0;
 	Leg_angle_ControllerPID_R.IntegralLimit=4;
-	Leg_angle_ControllerPID_R.MaxOut=6;
+	Leg_angle_ControllerPID_R.MaxOut=100;
 	Leg_angle_ControllerPID_R.Need_Value=0;
 	Leg_angle_ControllerPID_R.Improve=PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement;
+
+	Leg_phi0_controllerPID_L.Kp=5;
+	Leg_phi0_controllerPID_L.Ki=1;
+	Leg_phi0_controllerPID_L.Kd=0.2;
+	Leg_phi0_controllerPID_L.DeadBand=0;
+	Leg_phi0_controllerPID_L.IntegralLimit=4;
+	Leg_phi0_controllerPID_L.MaxOut=100;
+	Leg_phi0_controllerPID_L.Need_Value=0;
+	Leg_phi0_controllerPID_L.Improve=PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement;
+
+	Leg_phi0_controllerPID_R.Kp=5;
+	Leg_phi0_controllerPID_R.Ki=1;
+	Leg_phi0_controllerPID_R.Kd=0.2;
+	Leg_phi0_controllerPID_R.DeadBand=0;
+	Leg_phi0_controllerPID_R.IntegralLimit=4;
+	Leg_phi0_controllerPID_R.MaxOut=100;
+	Leg_phi0_controllerPID_R.Need_Value=0;
+	Leg_phi0_controllerPID_R.Improve=PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement;
+
 }
 
 
