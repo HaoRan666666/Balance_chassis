@@ -140,15 +140,14 @@ typedef struct
 {
     // 控制部分
     float vx;           // 前进方向速度
-    float wz;           // 旋转速度
+    float wz;
     float offset_angle; // 底盘和归中位置的夹角
     chassis_mode_e chassis_mode;
-    int chassis_speed_buff;
-
 
     uint8_t Leg_length_flag;
     uint8_t STJ_command_flag;
-    float Tp;
+    uint8_t chassis_reset_flag;
+
     // UI部分
     //  ...
 

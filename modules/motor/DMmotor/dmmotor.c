@@ -71,11 +71,11 @@ static void DMMotorDecode(CANInstance *motor_can)
     DaemonReload(motor->motor_daemon);
 
     measure->state= (rxbuff[0]&0xF0)>>4;
-    // if(measure->state==0)
-    // {
-    //   DMMotorSetMode(DM_CMD_MOTOR_MODE, motor); 
-    //   // 解决上电顺序导致的电机不使能问题
-    // }
+    if(measure->state==0)
+    {
+      DMMotorSetMode(DM_CMD_MOTOR_MODE, motor); 
+      // 解决上电顺序导致的电机不使能问题
+    }
     measure->last_position = measure->position;
     tmp = (uint16_t)((rxbuff[1] << 8) | rxbuff[2]);
     measure->position = uint_to_float(tmp, DM_P_MIN, DM_P_MAX, 16);

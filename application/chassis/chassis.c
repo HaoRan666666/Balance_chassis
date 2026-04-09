@@ -96,11 +96,17 @@ float test_target_theta=1;
 float YAW_Control_conpensasion_L=0;
 float YAW_Control_conpensasion_R=0;
 
+float YAW_speed_Control_conpensasion_L=0;
+float YAW_speed_Control_conpensasion_R=0;
+
 float Leg_Angle_Control_conpensation_L=0;  //腿角位控力矩
 float Leg_Angle_Control_conpensation_R=0;
 
 float Leg_omega_Control_conpensation_L=0;  //腿角速控力矩
 float Leg_omega_Control_conpensation_R=0;  //腿角速控力矩
+
+float Yaw_speed_control_Tl=0;
+float Yaw_speed_control_Tr=0; 
 
 uint8_t X_loss_flag=0;
 uint8_t Pitch_loss_flag=0;
@@ -117,6 +123,9 @@ uint8_t LQR_mode_flag=0; //LQR模式标志位
 
 uint8_t Leg_length_init_flag=0;
 uint8_t Body_turn_over_flag=0;//翻身标志位
+
+float reset_tick=0;
+uint8_t reset_flag=0;
 void ChassisInit()
 {
     Observer_init();
@@ -311,41 +320,6 @@ void Climb_step_control(void)
    }
 }
 
-/**
- * @brief 翻倒自救
- *
- */
-void Save_self_control(void)
-{
-    //应该分为两种情况，朝着前翻倒和朝着后翻倒，分别对应不同的自救策略，主要是腿部的旋转方向不同
-    Balance_data *balance_status=Get_Balance_Data();
-    //检测Pitch是否平行与地面，如果平行则进入下一阶段自起环节
-    if(fabs(balance_status->body_data.Pitch)<=0.05&&fabs(balance_status->body_data.d_pitch)<=0.05)//TODO:阈值有待调整
-    {
-
-        //进入下一阶段自起环节
-    }
-    else 
-    {
-
-        Leg_angle_ControllerPID_L.Need_Value+=0.1;// 方向和速度有待调整 ，以及过圈处理
-        Leg_angle_ControllerPID_R.Need_Value+=0.1;
-
-    }
-
-    //使用位置控制
-    Leg_Controller_AngularPosition(&Leg_Angle_Control_conpensation_L,&Leg_Angle_Control_conpensation_R);
-}
-
-//theta角度突变检测
-uint8_t theta_change_detect(Leg_data *Leg)
-{
-  if(fabs(Leg->theta-Leg->last_theta)>=3*PI/2)
-  {
-      return 1;
-  }
-  return 0;
-}
 void Body_turn_over_control(void)
 {
     //获取观测数据
@@ -358,8 +332,8 @@ void Body_turn_over_control(void)
    }
    else  
    {
-     Tpl=chassis_cmd_recv.Tp;
-     Tpr=chassis_cmd_recv.Tp;
+    //  Tpl=chassis_cmd_recv.Tp;
+    //  Tpr=chassis_cmd_recv.Tp;
    }
 
 
@@ -390,24 +364,25 @@ void Chassis_Reset(void)
     leg_init_angle_1_flag_L=0;
     leg_init_angle_1_flag_R=0;
     LQR_mode_flag=0;
+    Body_turn_over_flag=0;
     
     //清除欠压错误
-    if(motor_lb->measure.state==0x09)
-    {
-        DMMotorSetMode(DM_CMD_CLEAR_ERROR, motor_lb);
-    }
-    if(motor_lf->measure.state==0x09)
-    {
-        DMMotorSetMode(DM_CMD_CLEAR_ERROR, motor_lf);
-    }
-    if(motor_rf->measure.state==0x09)
-    {
-        DMMotorSetMode(DM_CMD_CLEAR_ERROR, motor_rf);
-    }
-    if(motor_rb->measure.state==0x09)
-    {
-        DMMotorSetMode(DM_CMD_CLEAR_ERROR, motor_rb);
-    }
+    // if(motor_lb->measure.state==0x09)
+    // {
+    //     DMMotorSetMode(DM_CMD_CLEAR_ERROR, motor_lb);
+    // }
+    // if(motor_lf->measure.state==0x09)
+    // {
+    //     DMMotorSetMode(DM_CMD_CLEAR_ERROR, motor_lf);
+    // }
+    // if(motor_rf->measure.state==0x09)
+    // {
+    //     DMMotorSetMode(DM_CMD_CLEAR_ERROR, motor_rf);
+    // }
+    // if(motor_rb->measure.state==0x09)
+    // {
+    //     DMMotorSetMode(DM_CMD_CLEAR_ERROR, motor_rb);
+    // }
 
 }
 
@@ -479,7 +454,7 @@ void Balance_Init_state_Detect(void)
         else if(balance_status->Leg_L.leg_init_state==FOOT_Loc_3&&(leg_init_angle_1_flag_L==0||leg_init_angle_1_flag_R==0))
         {
             //控制腿部摆角逆时针旋转，直到临界值
-            if(fabs(balance_status->Leg_L.phi_0-PHI_TARGET_1)<=0.01)
+            if(fabs(balance_status->Leg_L.phi_0-PHI_TARGET_1)<=0.1)
             {
             //停止旋转,更新标志位
             Leg_omega_ControllerPID_L.Need_Value=0;
@@ -546,7 +521,7 @@ void Balance_Init_state_Detect(void)
         else if(balance_status->Leg_R.leg_init_state==FOOT_Loc_3&&(leg_init_angle_1_flag_L==0||leg_init_angle_1_flag_R==0))
         {
             //控制腿部摆角逆时针旋转，直到临界值
-            if(fabs(balance_status->Leg_R.phi_0-PHI_TARGET_1)<=0.01)
+            if(fabs(balance_status->Leg_R.phi_0-PHI_TARGET_1)<=0.1)
             {
             //停止旋转
             Leg_omega_ControllerPID_R.Need_Value=0;
@@ -593,8 +568,8 @@ void Balance_Init_state_Detect(void)
         Leg_omega_ControllerPID_R.Need_Value=0;//放置角度控制切换为位置控制时出现的冲突
 
           //收腿，设置目标腿长为最小值
-          TargetL0_L-=1.5*balance_status->dt;
-          TargetL0_R-=1.5*balance_status->dt;
+          TargetL0_L=0.16;
+          TargetL0_R=0.16;
           //检测两腿是否都收回到最小值
           if(balance_status->Leg_L.L0<=0.2&&balance_status->Leg_R.L0<=0.2)
           {
@@ -610,8 +585,8 @@ void Balance_Init_state_Detect(void)
             //更新标志位，进入LQR模式
             LQR_mode_flag=1;
             balance_status->body_data.x=0;//清零位移项（初始化bug原因）
-            TargetL0_L=0.3;//防止支持力低于阈值导致轮电机失力
-            TargetL0_R=0.3;
+            TargetL0_L=0.2;//防止支持力低于阈值导致轮电机失力
+            TargetL0_R=0.2;
             }
           }
           else
@@ -663,7 +638,7 @@ void ChassisTask()
     chassis_cmd_recv = *(Chassis_Ctrl_Cmd_s *)CANCommGet(chasiss_can_comm);
 #endif // CHASSIS_BOARD
     // Leg_loss_control_detect(); //腿部失控检测函数
-    chassis_cmd_recv.chassis_mode = CHASSIS_FOLLOW_GIMBAL_YAW;
+    // chassis_cmd_recv.chassis_mode = CHASSIS_FOLLOW_GIMBAL_YAW;
     if (chassis_cmd_recv.chassis_mode == CHASSIS_ZERO_FORCE)
     { // 如果出现重要模块离线或遥控器设置为急停,让电机停止
         DMMotorStop(motor_lf);
@@ -690,7 +665,7 @@ void ChassisTask()
         chassis_cmd_recv.wz = 0;
         break;
     case CHASSIS_FOLLOW_GIMBAL_YAW: // 跟随云台,不单独设置pid,以误差角度平方为速度输出
-        chassis_cmd_recv.wz = -1.5f / 1000.0f * chassis_cmd_recv.offset_angle * abs(chassis_cmd_recv.offset_angle);
+        chassis_cmd_recv.wz = -1.5f / 800.0f * chassis_cmd_recv.offset_angle * abs(chassis_cmd_recv.offset_angle);
         break;
     case CHASSIS_ROTATE: // 自旋,同时保持全向机动;当前wz维持定值,后续增加不规则的变速策略
         chassis_cmd_recv.wz = 6;
@@ -700,30 +675,44 @@ void ChassisTask()
     }
     //获取观测数据
     Observer_DataGet();
+    if(chassis_cmd_recv.chassis_reset_flag==1||referee_data->GameRobotState.power_management_chassis_output==0)
+    {
+      Chassis_Reset();
+      reset_tick=DWT_GetTimeline_ms();
+    }
+
+    // if((DWT_GetTimeline_ms()-reset_tick)>=2000&&(reset_flag=1))
+    // {
+    //     Chassis_Reset();
+    //     reset_flag=0;
+    // }
+
     //遥控器输入量
-    TargetdX=chassis_cmd_recv.vx*2;
+    if(chassis_cmd_recv.chassis_mode==CHASSIS_ROTATE) chassis_cmd_recv.vx=0;
+    TargetdX=chassis_cmd_recv.vx*1.2;
     TargetX+=TargetdX*Balance_status->dt;
-    Targetdw=chassis_cmd_recv.wz;//rc_data->rc.rocker_r_/660.0f*2;
+    Targetdw=chassis_cmd_recv.wz;
+    if(LQR_mode_flag==0) Targetdw=0;
     Target_Yaw-=Targetdw*Balance_status->dt;
     if(chassis_cmd_recv.Leg_length_flag==1)
-    {
-      TargetL0_L+=0.2*Balance_status->dt;
-      TargetL0_R+=0.2*Balance_status->dt;
-    }
-    else if(chassis_cmd_recv.Leg_length_flag==2) 
     {
       TargetL0_L-=0.2*Balance_status->dt;
       TargetL0_R-=0.2*Balance_status->dt;
     }
+    else if(chassis_cmd_recv.Leg_length_flag==2) 
+    {
+      TargetL0_L+=0.2*Balance_status->dt;
+      TargetL0_R+=0.2*Balance_status->dt;
+    }
     //腿长控制->F
     float Leg_Length_Control_Left_F,Leg_Length_Control_Right_F;
     //左腿部分
-    TargetL0_L=float_constrain(TargetL0_L,0.15,0.38); //腿长限幅
+    TargetL0_L=float_constrain(TargetL0_L,0.18,0.38); //腿长限幅
     // if(Balance_status->Leg_L.Fn<=FN_Threshold) TargetL0_L=0.3;
     Left_Leg_Pid.Need_Value=TargetL0_L;
     // Left_Leg_Pid.Need_Value=float_constrain(Left_Leg_Pid.Need_Value,0.15,0.34); //腿长限幅
     //右腿部分
-    TargetL0_R=float_constrain(TargetL0_R,0.15,0.38); //腿长限幅
+    TargetL0_R=float_constrain(TargetL0_R,0.18,0.38); //腿长限幅
     // if(Balance_status->Leg_R.Fn<=FN_Threshold) TargetL0_R=0.3;
     Right_Leg_Pid.Need_Value=TargetL0_R;
     // Right_Leg_Pid.Need_Value=float_constrain(Right_Leg_Pid.Need_Value,0.15,0.34); //腿长限幅
@@ -734,7 +723,9 @@ void ChassisTask()
         Climb_step_control();
     }
 
-    if(Balance_status->Leg_L.phi_0!=0&&Balance_status->Leg_R.phi_0!=0)
+    if((DWT_GetTimeline_ms()-reset_tick)>=2000)
+    {
+     if(Balance_status->Leg_L.phi_0!=0&&Balance_status->Leg_R.phi_0!=0)
     {
 
         if(LQR_mode_flag==0)//腿部初始化阶段，先进行腿部初始化，完成后进入LQR控制阶段
@@ -764,10 +755,15 @@ void ChassisTask()
             }
             Fl=Leg_Length_Control_Left_F;
             Fr=Leg_Length_Control_Right_F;
+            if(leg_init_angle_1_flag_L==1&&leg_init_angle_1_flag_R==1&&LQR_mode_flag==0)
+            {
+            Fl=Fl-5;
+            Fr=Fr-5;
+            }
             Leg_Controller_VMC(Balance_status->Leg_L,Fl,Tpl,&T1l,&T2l);
             Leg_Controller_VMC(Balance_status->Leg_R,Fr,Tpr,&T1r,&T2r);
-            Chassis_MotorControl_Leg_init(T1l,T2l,T1r,T2r);
-            Chassis_Wheel_Control(0,0);
+            // Chassis_MotorControl_Leg_init(T1l,T2l,T1r,T2r);
+            // Chassis_Wheel_Control(0,0);
         }
         else
         {
@@ -779,7 +775,7 @@ void ChassisTask()
 
             Leg_Controller_VMC(Balance_status->Leg_L,Fl,Tpl,&T1l,&T2l);
             Leg_Controller_VMC(Balance_status->Leg_R,Fr,Tpr,&T1r,&T2r);  
-            Chassis_MotorControl_Leg_init(T1l,T2l,T1r,T2r);
+            // Chassis_MotorControl_Leg_init(T1l,T2l,T1r,T2r);
 
             Motion_Controller_Yaw_Control_Pid(&YAW_Control_conpensasion_L,&YAW_Control_conpensasion_R,Target_Yaw);
             if(Balance_status->Leg_L.Fn<=FN_Threshold||Balance_status->Leg_R.Fn<=FN_Threshold) 
@@ -789,9 +785,16 @@ void ChassisTask()
             }  
             Tl+=YAW_Control_conpensasion_L;
             Tr+=YAW_Control_conpensasion_R;
-            Chassis_Wheel_Control(Tl,Tr);
+            // Chassis_Wheel_Control(Tl,Tr);
         }
 
+    }
+   
+    }
+    else
+    {
+        Chassis_MotorControl_Leg_init(0,0,0,0);
+        Chassis_Wheel_Control(0,0);
     }
     // 根据裁判系统的反馈数据和电容数据对输出限幅并设定闭环参考值
     // LimitChassisOutput();
@@ -871,9 +874,6 @@ void Chassis_Wheel_Control(float T_l ,float T_r)
 
 void Chassis_MotorControl_Leg_init(float T1_l,float T2_l,float T1_r,float T2_r)
 {
-	//  float Tl,Tr;
-	//  Warming_Brake(&Tl,&Tr);  //这里暂时不是很理解
-
 	//可以把关节电机的使能放在这里
 
     //前腿T1 后腿T2

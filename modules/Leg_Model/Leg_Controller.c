@@ -38,7 +38,7 @@ void Leg_Controller_LegControlInit(void)
 	Left_Leg_Pid.DeadBand=0;
 	Left_Leg_Pid.IntegralLimit=100;
 	Left_Leg_Pid.MaxOut=200;
-	Left_Leg_Pid.Need_Value=0.15;
+	Left_Leg_Pid.Need_Value=0.18;
 	Left_Leg_Pid.Improve=PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement;
 
 	Right_Leg_Pid.Kp=1200;
@@ -47,7 +47,7 @@ void Leg_Controller_LegControlInit(void)
 	Right_Leg_Pid.DeadBand=0;
 	Right_Leg_Pid.IntegralLimit=100;
 	Right_Leg_Pid.MaxOut=200;
-	Right_Leg_Pid.Need_Value=0.15;
+	Right_Leg_Pid.Need_Value=0.18;
 	Right_Leg_Pid.Improve=PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement;
 
 	Leg_omega_ControllerPID_L.Kp=-8;

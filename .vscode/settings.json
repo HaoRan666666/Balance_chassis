@@ -17,6 +17,7 @@
         "lqr.h": "c",
         "stdint.h": "c",
         "general_def.h": "c",
-        "robot_cmd.h": "c"
+        "robot_cmd.h": "c",
+        "user_lib.h": "c"
     }
 }

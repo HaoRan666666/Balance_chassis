@@ -18,11 +18,10 @@ PIDInstance Roll_FControllerPID;
 // PIDInstance X_controllerPID;
 PIDInstance Yaw_ControllerPID;
 
-
+PIDInstance Yaw_speed_PID;
 void Motion_Controller_Init(void)
 {
     //双腿协调pid初始化  
-    //TODO:需要调参
    LegCoordination_ControllerPID.Kp=0;
    LegCoordination_ControllerPID.Ki=0;
    LegCoordination_ControllerPID.Kd=0;
@@ -35,12 +34,18 @@ void Motion_Controller_Init(void)
    Roll_FControllerPID.MaxOut=0;
    Roll_FControllerPID.Need_Value=0;
 
-   Yaw_ControllerPID.Kp=-12;
+   Yaw_ControllerPID.Kp=-25;
    Yaw_ControllerPID.Ki=0;
-   Yaw_ControllerPID.Kd=-1.5;
+   Yaw_ControllerPID.Kd=-6;
    Yaw_ControllerPID.MaxOut=10;
    Yaw_ControllerPID.Need_Value=0;
    
+   Yaw_speed_PID.Kp=-0.1;
+   Yaw_speed_PID.Ki=0;
+   Yaw_speed_PID.Kd=0;
+   Yaw_speed_PID.MaxOut=10;
+   Yaw_speed_PID.Need_Value=0;
+
 }
 
 void Motion_Controller_Yaw_Control_Pid(float *LeftWheel_DeltaT,float *RightWheel_DeltaT,float Target_Yaw)
@@ -134,4 +139,13 @@ void Motion_Controller_Roll_Control(float Roll_Target,float *LeftLeg_DeltaL0,flo
   (*LeftLeg_DeltaF)=Roll_FControllerPID.Output;
   (*RightLeg_DeltaF)=-Roll_FControllerPID.Output;  //(正负有待测试)
 
+}
+
+void Yaw_speed_control(float *LeftLeg_DeltaT,float *RightLeg_DeltaT)
+{
+   Balance_data *balance_data = Get_Balance_Data();
+   float yaw_control_t;
+   yaw_control_t=PIDCalculate(&Yaw_speed_PID,balance_data->body_data.d_Yaw,Yaw_speed_PID.Need_Value);
+   (*LeftLeg_DeltaT)=yaw_control_t;
+   (*RightLeg_DeltaT)=-yaw_control_t;
 }

@@ -99,6 +99,7 @@ typedef struct
 
         uint8_t switch_left;  // 左侧开关
         uint8_t switch_right; // 右侧开关
+        uint8_t pause_key;   // 暂停键,按下时所有动作停止,再次按下恢复
     } rc;
     struct
     {

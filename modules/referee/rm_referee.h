@@ -27,7 +27,7 @@ typedef struct
 	uint16_t CmdID;
 	ext_game_state_t GameState;							   // 0x0001
 	ext_game_result_t GameResult;						   // 0x0002
-	ext_game_robot_HP_t GameRobotHP;					   // 0x0003
+	game_robot_HP_t GameRobotHP;					   // 0x0003
 	ext_event_data_t EventData;							   // 0x0101
 	ext_supply_projectile_action_t SupplyProjectileAction; // 0x0102
 	ext_game_robot_state_t GameRobotState;				   // 0x0201
